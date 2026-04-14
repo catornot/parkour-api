@@ -1,26 +1,25 @@
-mod persistence;
+mod event;
 pub mod log;
 pub mod map;
-mod event;
-mod scores;
+mod persistence;
 pub mod route;
 mod scoreboard;
+mod scores;
 
 use event::Events;
 use map::Maps;
-use route::MapRoutes;
-use persistence::{start_save_cron, load_state};
-use warp::Filter;
 use parking_lot::RwLock;
-use std::{env, sync::Arc, collections::HashMap};
-
+use persistence::{load_state, start_save_cron};
+use route::MapRoutes;
+use std::{collections::HashMap, env, sync::Arc};
+use warp::Filter;
 
 #[derive(Clone)]
 pub struct Store {
-  events_list: Arc<RwLock<Events>>,  
-  scores_list: Arc<RwLock<scores::ScoreEntries>>,
-  maps_list: Arc<RwLock<Maps>>,
-  routes_list: Arc<RwLock<MapRoutes>>
+    events_list: Arc<RwLock<Events>>,
+    scores_list: Arc<RwLock<scores::ScoreEntries>>,
+    maps_list: Arc<RwLock<Maps>>,
+    routes_list: Arc<RwLock<MapRoutes>>,
 }
 
 impl Store {
@@ -29,11 +28,10 @@ impl Store {
             events_list: Arc::new(RwLock::new(Vec::new())),
             scores_list: Arc::new(RwLock::new(HashMap::new())),
             maps_list: Arc::new(RwLock::new(HashMap::new())),
-            routes_list: Arc::new(RwLock::new(HashMap::new()))
+            routes_list: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
-
 
 #[tokio::main]
 async fn main() {
@@ -62,7 +60,10 @@ async fn main() {
     let event_routes = event::get_routes(store.clone());
     let score_routes = scores::get_routes(store.clone());
     let map_route_routes = route::get_routes(store.clone());
-    let routes = event_routes.or(map_routes).or(score_routes).or(map_route_routes);
+    let routes = event_routes
+        .or(map_routes)
+        .or(score_routes)
+        .or(map_route_routes);
 
     // Authentication middleware
     let routes = accept_requests.and(routes);
@@ -71,13 +72,9 @@ async fn main() {
     if store.clone().events_list.read().len() >= 1 {
         let scoreboard_route = scoreboard::get_routes(store);
         let new_routes = routes.or(scoreboard_route);
-        warp::serve(new_routes)
-            .run(([0, 0, 0, 0], 3030))
-            .await;
+        warp::serve(new_routes).run(([0, 0, 0, 0], 3030)).await;
     } else {
         log::warn("Not serving scoreboard since no events were found.");
-        warp::serve(routes)
-            .run(([0, 0, 0, 0], 3030))
-            .await;
+        warp::serve(routes).run(([0, 0, 0, 0], 3030)).await;
     }
 }

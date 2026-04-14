@@ -1,6 +1,6 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use warp::{http, Filter, Reply, Rejection};
+use warp::{http, Filter, Rejection, Reply};
 
 use crate::Store;
 
@@ -12,62 +12,59 @@ pub struct Event {
     description: String,
     pub start: i64,
     pub end: i64,
-    pub id: Option<String>
+    pub id: Option<String>,
 }
-
 
 /// Returns the list of all events.
-/// 
-async fn get_list(
-    store: Store
-    ) -> Result<impl Reply, Rejection> {
-        let r = store.events_list.read();
-        Ok(warp::reply::json(&*r))
+///
+async fn get_list(store: Store) -> Result<impl Reply, Rejection> {
+    let r = store.events_list.read();
+    Ok(warp::reply::json(&*r))
 }
 
-
 /// This middleware creates `Event` payloads from POST request bodies.
-/// 
+///
 pub fn post_json() -> impl Filter<Extract = (Event,), Error = Rejection> + Clone {
     warp::body::content_length_limit(1024 * 16).and(warp::body::json())
 }
 
-
 /// Creates an event (lol).
-/// 
-async fn create_event(
-    entry: Event,
-    store: Store
-    ) -> Result<impl Reply, Rejection> {
-        // Checking for existing event
-        let events: Vec<Event> = store.events_list.read().to_vec();
-        let index = events.iter().position(|e| e.name == entry.name).unwrap_or(usize::MAX);
-        if index != usize::MAX {
-            return Ok(warp::reply::with_status(
-                "",
-                http::StatusCode::ALREADY_REPORTED,
-            ));
-        }
-
-        let event_id = Uuid::new_v4().to_string();
-        let mut write_lock = store.events_list.write();
-        write_lock.push(Event { name: entry.name, description: entry.description, start: entry.start, end: entry.end, id: Some(event_id.clone()) });
-
-        // Create associated maps
-        let mut maps_write_lock = store.maps_list.write();
-        maps_write_lock.insert(event_id, [].to_vec());
-
-        Ok(warp::reply::with_status(
+///
+async fn create_event(entry: Event, store: Store) -> Result<impl Reply, Rejection> {
+    // Checking for existing event
+    let events: Vec<Event> = store.events_list.read().to_vec();
+    let index = events
+        .iter()
+        .position(|e| e.name == entry.name)
+        .unwrap_or(usize::MAX);
+    if index != usize::MAX {
+        return Ok(warp::reply::with_status(
             "",
-            http::StatusCode::CREATED,
-        ))
-}
+            http::StatusCode::ALREADY_REPORTED,
+        ));
+    }
 
+    let event_id = Uuid::new_v4().to_string();
+    let mut write_lock = store.events_list.write();
+    write_lock.push(Event {
+        name: entry.name,
+        description: entry.description,
+        start: entry.start,
+        end: entry.end,
+        id: Some(event_id.clone()),
+    });
+
+    // Create associated maps
+    let mut maps_write_lock = store.maps_list.write();
+    maps_write_lock.insert(event_id, [].to_vec());
+
+    Ok(warp::reply::with_status("", http::StatusCode::CREATED))
+}
 
 /// Returns all event-associated routes:
 ///     * one route to list all events;
 ///     * one route to create events.
-/// 
+///
 pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     let store_filter = warp::any().map(move || store.clone());
 
