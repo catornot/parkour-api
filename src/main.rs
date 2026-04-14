@@ -70,7 +70,7 @@ async fn main() {
     let routes = accept_requests.and(routes);
 
     // Serve scoreboard route only if there are registered events
-    if store.clone().events_list.read().len() >= 1 {
+    if !store.clone().events_list.read().is_empty() {
         let scoreboard_route = scoreboard::get_routes(store);
         let new_routes = routes.or(scoreboard_route);
         warp::serve(new_routes).run(([0, 0, 0, 0], 3030)).await;

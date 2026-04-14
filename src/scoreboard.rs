@@ -68,13 +68,11 @@ fn render(hbs: Arc<Handlebars<'_>>, store: Store) -> impl warp::Reply {
         let corresponding_routes = routes.get(&map_id).unwrap().clone();
         let mut map_routes: Vec<RouteResult> = corresponding_routes
             .into_iter()
-            .map(|route| {
-                return RouteResult {
-                    id: route.id.unwrap(),
-                    name: route.name,
-                    map_name: map.map_name.clone(),
-                    scores: Vec::new(),
-                };
+            .map(|route| RouteResult {
+                id: route.id.unwrap(),
+                name: route.name,
+                map_name: map.map_name.clone(),
+                scores: Vec::new(),
             })
             .collect();
         results.append(&mut map_routes);
