@@ -2,7 +2,13 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use warp::{hyper::StatusCode, Filter, Rejection, Reply};
 
-use crate::Store;
+use crate::{
+    serde_ext::{
+        deserialize_arr_vector, deserialize_iter, deserialize_iter_arr, deserialize_vector,
+        serialize_iter, serialize_iter_arr, serialize_vector,
+    },
+    Store,
+};
 use serde::{Deserialize, Serialize};
 
 pub type MapRoutes = HashMap<String, Vec<MapRoute>>;
@@ -14,10 +20,10 @@ struct Line {
     origin: [f64; 3],
     #[serde(serialize_with = "serialize_vector")]
     #[serde(deserialize_with = "deserialize_vector")]
-    angles: [i64; 3],
+    angles: [f64; 3],
     dimensions: [i64; 2],
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
+    #[serde(serialize_with = "serialize_iter")]
+    #[serde(deserialize_with = "deserialize_arr_vector")]
     trigger: [[f64; 3]; 2],
 }
 
@@ -30,15 +36,23 @@ struct RouteName {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct LeaderboardSource {
+    #[serde(serialize_with = "serialize_vector")]
+    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
-    angles: [i64; 3],
+    #[serde(serialize_with = "serialize_vector")]
+    #[serde(deserialize_with = "deserialize_vector")]
+    angles: [f64; 3],
     dimensions: [i64; 2],
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Leaderboard {
+    #[serde(serialize_with = "serialize_vector")]
+    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
-    angles: [i64; 3],
+    #[serde(serialize_with = "serialize_vector")]
+    #[serde(deserialize_with = "deserialize_vector")]
+    angles: [f64; 3],
     dimensions: [i64; 2],
     source: LeaderboardSource,
 }
@@ -51,19 +65,29 @@ struct Leaderboards {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct StartPosition {
+    #[serde(serialize_with = "serialize_vector")]
+    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
-    angles: [i64; 3],
+    #[serde(serialize_with = "serialize_vector")]
+    #[serde(deserialize_with = "deserialize_vector")]
+    angles: [f64; 3],
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct EndPosition {
+    #[serde(serialize_with = "serialize_vector")]
+    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Robot {
+    #[serde(serialize_with = "serialize_vector")]
+    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
-    angles: [i64; 3],
+    #[serde(serialize_with = "serialize_vector")]
+    #[serde(deserialize_with = "deserialize_vector")]
+    angles: [f64; 3],
     talkable_radius: i64,
     animation: String,
 }
@@ -76,6 +100,8 @@ struct StartIndicator {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct MapObject {
+    #[serde(serialize_with = "serialize_vector")]
+    #[serde(deserialize_with = "deserialize_vector")]
     coordinates: [f64; 3],
     angles: [f64; 3],
     scale: f64,
@@ -90,9 +116,13 @@ pub struct MapRoute {
     start_line: Line,
     finish_line: Line,
     leaderboards: Leaderboards,
+    #[serde(serialize_with = "serialize_iter")]
+    #[serde(deserialize_with = "deserialize_iter")]
     checkpoints: Vec<[f64; 3]>,
     start: StartPosition,
     end: EndPosition,
+    #[serde(serialize_with = "serialize_iter_arr")]
+    #[serde(deserialize_with = "deserialize_iter_arr")]
     ziplines: Vec<[[f64; 3]; 2]>,
     perks: Option<HashMap<String, String>>,
     robot: Robot,

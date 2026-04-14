@@ -5,6 +5,7 @@ mod persistence;
 pub mod route;
 mod scoreboard;
 mod scores;
+mod serde_ext;
 
 use event::Events;
 use map::Maps;
