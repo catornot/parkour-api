@@ -1,31 +1,30 @@
 use std::env;
 use std::fs::create_dir_all;
-use std::{thread, time::Duration, fs::File};
 use std::io::prelude::*;
+use std::{fs::File, thread, time::Duration};
 
 use crate::event::Events;
 use crate::map::Maps;
 use crate::route::MapRoutes;
 use crate::scores::ScoreEntries;
-use crate::{Store, log};
+use crate::{log, Store};
 
 const EVENTS_FILE: &str = "data/events.json";
 const MAPS_FILE: &str = "data/maps.json";
 const SCORES_FILE: &str = "data/scores.json";
 const ROUTES_FILE: &str = "data/routes.json";
 
-
 /// Starts a thread that will save store state to JSON files every few seconds.
-/// 
+///
 /// The time between two consecutive saves is 15 minutes by default, and can be
 /// customized with the `PARKOUR_API_SAVE_TIMER` environment variable.
-/// 
+///
 pub fn start_save_cron(store: Store) {
     let cron_interval_minutes: u64 = match env::var("PARKOUR_API_SAVE_TIMER") {
         Ok(s) => {
             log::info(&format!("Timer argument found ({} minutes).", s));
             s.parse::<u64>().unwrap()
-        },
+        }
         Err(_) => {
             log::info("No timer argument was found, defaulting to 15 minutes.");
             15
@@ -50,7 +49,10 @@ pub fn start_save_cron(store: Store) {
             let mut buffer = match File::create(SCORES_FILE) {
                 Ok(file) => file,
                 Err(err) => {
-                    log::error(&format!("\"{}\" file could not be created [{}].", SCORES_FILE, err));
+                    log::error(&format!(
+                        "\"{}\" file could not be created [{}].",
+                        SCORES_FILE, err
+                    ));
                     std::process::exit(3);
                 }
             };
@@ -75,7 +77,10 @@ pub fn start_save_cron(store: Store) {
             let mut buffer = match File::create(MAPS_FILE) {
                 Ok(file) => file,
                 Err(err) => {
-                    log::error(&format!("\"{}\" file could not be created [{}].", MAPS_FILE, err));
+                    log::error(&format!(
+                        "\"{}\" file could not be created [{}].",
+                        MAPS_FILE, err
+                    ));
                     std::process::exit(3);
                 }
             };
@@ -100,7 +105,10 @@ pub fn start_save_cron(store: Store) {
             let mut buffer = match File::create(EVENTS_FILE) {
                 Ok(file) => file,
                 Err(err) => {
-                    log::error(&format!("\"{}\" file could not be created [{}].", EVENTS_FILE, err));
+                    log::error(&format!(
+                        "\"{}\" file could not be created [{}].",
+                        EVENTS_FILE, err
+                    ));
                     std::process::exit(3);
                 }
             };
@@ -125,7 +133,10 @@ pub fn start_save_cron(store: Store) {
             let mut buffer = match File::create(ROUTES_FILE) {
                 Ok(file) => file,
                 Err(err) => {
-                    log::error(&format!("\"{}\" file could not be created [{}].", ROUTES_FILE, err));
+                    log::error(&format!(
+                        "\"{}\" file could not be created [{}].",
+                        ROUTES_FILE, err
+                    ));
                     std::process::exit(3);
                 }
             };
@@ -148,16 +159,18 @@ pub fn start_save_cron(store: Store) {
     });
 }
 
-
 /// Called when the API is started, this method checks if state was previously
 /// stored in JSON files, and loads up store state from them if possible.
-/// 
+///
 pub fn load_state(store: Store) {
     // Scores
     let mut file = match File::open(SCORES_FILE) {
         Ok(file) => file,
         Err(_) => {
-            log::info(&format!("\"{}\" file does not exist, initializing scores list as empty.", SCORES_FILE));
+            log::info(&format!(
+                "\"{}\" file does not exist, initializing scores list as empty.",
+                SCORES_FILE
+            ));
             return;
         }
     };
@@ -165,7 +178,10 @@ pub fn load_state(store: Store) {
     match file.read_to_string(&mut data) {
         Ok(_) => (),
         Err(err) => {
-            log::error(&format!("Failed reading \"{}\" file [{}].", SCORES_FILE, err));
+            log::error(&format!(
+                "Failed reading \"{}\" file [{}].",
+                SCORES_FILE, err
+            ));
             std::process::exit(2);
         }
     };
@@ -180,13 +196,19 @@ pub fn load_state(store: Store) {
     for (key, value) in serialized {
         write_lock.insert(key, value);
     }
-    log::info(&format!("Loaded scores list from \"{}\" file.", SCORES_FILE));
+    log::info(&format!(
+        "Loaded scores list from \"{}\" file.",
+        SCORES_FILE
+    ));
 
     // Maps
     let mut file = match File::open(MAPS_FILE) {
         Ok(file) => file,
         Err(_) => {
-            log::info(&format!("\"{}\" file does not exist, initializing maps list as empty.", MAPS_FILE));
+            log::info(&format!(
+                "\"{}\" file does not exist, initializing maps list as empty.",
+                MAPS_FILE
+            ));
             return;
         }
     };
@@ -215,7 +237,10 @@ pub fn load_state(store: Store) {
     let mut file = match File::open(EVENTS_FILE) {
         Ok(file) => file,
         Err(_) => {
-            log::info(&format!("\"{}\" file does not exist, initializing events list as empty.", EVENTS_FILE));
+            log::info(&format!(
+                "\"{}\" file does not exist, initializing events list as empty.",
+                EVENTS_FILE
+            ));
             return;
         }
     };
@@ -223,7 +248,10 @@ pub fn load_state(store: Store) {
     match file.read_to_string(&mut data) {
         Ok(_) => (),
         Err(err) => {
-            log::error(&format!("Failed reading \"{}\" file [{}].", EVENTS_FILE, err));
+            log::error(&format!(
+                "Failed reading \"{}\" file [{}].",
+                EVENTS_FILE, err
+            ));
             std::process::exit(2);
         }
     };
@@ -238,13 +266,19 @@ pub fn load_state(store: Store) {
     for value in serialized {
         write_lock.push(value);
     }
-    log::info(&format!("Loaded events list from \"{}\" file.", EVENTS_FILE));
+    log::info(&format!(
+        "Loaded events list from \"{}\" file.",
+        EVENTS_FILE
+    ));
 
     // Routes
     let mut file = match File::open(ROUTES_FILE) {
         Ok(file) => file,
         Err(_) => {
-            log::info(&format!("\"{}\" file does not exist, initializing routes list as empty.", ROUTES_FILE));
+            log::info(&format!(
+                "\"{}\" file does not exist, initializing routes list as empty.",
+                ROUTES_FILE
+            ));
             return;
         }
     };
@@ -252,7 +286,10 @@ pub fn load_state(store: Store) {
     match file.read_to_string(&mut data) {
         Ok(_) => (),
         Err(err) => {
-            log::error(&format!("Failed reading \"{}\" file [{}].", ROUTES_FILE, err));
+            log::error(&format!(
+                "Failed reading \"{}\" file [{}].",
+                ROUTES_FILE, err
+            ));
             std::process::exit(2);
         }
     };
@@ -267,5 +304,8 @@ pub fn load_state(store: Store) {
     for (key, value) in serialized {
         write_lock.insert(key, value);
     }
-    log::info(&format!("Loaded routes list from \"{}\" file.", ROUTES_FILE));
+    log::info(&format!(
+        "Loaded routes list from \"{}\" file.",
+        ROUTES_FILE
+    ));
 }
