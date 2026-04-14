@@ -1,10 +1,11 @@
 pub mod log;
 pub mod map;
 mod persistence;
-pub mod route;
+mod route;
 mod scoreboard;
 mod scores;
-pub mod slug;
+mod serde_ext;
+mod slug;
 
 use map::Maps;
 use parking_lot::{Mutex, RwLock};
