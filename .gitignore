@@ -2,3 +2,4 @@
 .env*
 data/*.json
 .direnv
+scores.db

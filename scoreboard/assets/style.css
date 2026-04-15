@@ -20,6 +20,7 @@ body {
 
 #content > nav {
     flex: 1;
+    min-width: 20rem;
     background-color: #212B4E;
     padding: 1rem;
     margin-right: 5px;
@@ -156,6 +157,8 @@ th, td {
     margin: -80px 23px 0 37px;
     background: #141a32;
     display: none;
+    max-height: calc(100vh - 420px);
+    overflow-y: auto;
 }
 #resultsList[show] {
     display: block;
