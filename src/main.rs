@@ -2,6 +2,7 @@ mod event;
 pub mod log;
 pub mod map;
 mod persistence;
+mod recordings;
 pub mod route;
 mod scoreboard;
 mod scores;
@@ -21,6 +22,7 @@ pub struct Store {
     scores_list: Arc<RwLock<scores::ScoreEntries>>,
     maps_list: Arc<RwLock<Maps>>,
     routes_list: Arc<RwLock<MapRoutes>>,
+    recordings_list: Arc<RwLock<recordings::RecordingEntries>>,
 }
 
 impl Store {
@@ -30,6 +32,7 @@ impl Store {
             scores_list: Arc::new(RwLock::new(HashMap::new())),
             maps_list: Arc::new(RwLock::new(HashMap::new())),
             routes_list: Arc::new(RwLock::new(HashMap::new())),
+            recordings_list: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }

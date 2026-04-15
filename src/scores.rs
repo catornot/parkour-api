@@ -10,7 +10,9 @@ pub type ScoreEntries = HashMap<String, Vec<ScoreEntry>>;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ScoreEntry {
     name: String,
+    uid: String,
     time: f32,
+    recording_ref: String,
 }
 
 /// Retrives scores list associated to a route id.
@@ -47,17 +49,24 @@ async fn create_score_entry(
     // Check if provided route exists
     let scores_map: ScoreEntries = store.scores_list.read().clone();
     let optional_scores = scores_map.get(&route_id);
-    if optional_scores.is_none() {
+    let Some(optional_scores) = optional_scores else {
         return Ok(warp::reply::with_status(
             warp::reply::json(&"Route not found."),
             StatusCode::NOT_FOUND,
         ));
-    }
+    };
 
-    let mut scores = optional_scores.unwrap().clone().to_vec();
+    let mut scores = optional_scores.clone().to_vec();
+
+    // find if there are mismatched names and fix them
+    scores
+        .iter_mut()
+        .filter(|sealed_entry| sealed_entry.uid == entry.uid && sealed_entry.name != entry.name)
+        .for_each(|sealed_entry| sealed_entry.name = entry.name.clone());
+
     let index = scores
         .iter()
-        .position(|e| e.name == entry.name)
+        .position(|e| e.uid == entry.uid)
         .unwrap_or(usize::MAX);
     if index != usize::MAX {
         let existing_entry = &scores[index];
@@ -77,7 +86,9 @@ async fn create_score_entry(
     // Create new entry
     scores.push(ScoreEntry {
         name: entry.name,
+        uid: entry.uid,
         time: entry.time,
+        recording_ref: entry.recording_ref,
     });
 
     // Sort list by times

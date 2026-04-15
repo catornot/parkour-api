@@ -1,10 +1,12 @@
-use std::env;
 use std::fs::create_dir_all;
 use std::io::prelude::*;
+use std::path::PathBuf;
+use std::{env, fs};
 use std::{fs::File, thread, time::Duration};
 
 use crate::event::Events;
 use crate::map::Maps;
+use crate::recordings::Recording;
 use crate::route::MapRoutes;
 use crate::scores::ScoreEntries;
 use crate::{log, Store};
@@ -13,6 +15,7 @@ const EVENTS_FILE: &str = "data/events.json";
 const MAPS_FILE: &str = "data/maps.json";
 const SCORES_FILE: &str = "data/scores.json";
 const ROUTES_FILE: &str = "data/routes.json";
+const RECORDINGS_DIR: &str = "data/recordings";
 
 /// Starts a thread that will save store state to JSON files every few seconds.
 ///
@@ -308,4 +311,23 @@ pub fn load_state(store: Store) {
         "Loaded routes list from \"{}\" file.",
         ROUTES_FILE
     ));
+
+    // recordings
+    // let read_dir = match PathBuf::from(RECORDINGS_DIR).read_dir() {
+    //     Ok(data) => data,
+    //     Err(err) => {
+    //         log::error(&format!("Failed reading recordings directory [{}].", err));
+    //         std::process::exit(2);
+    //     }
+    // };
+    // match read_dir
+    //     .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+    //     .filter(|path| path.is_file())
+    //     .filter_map(|path| fs::read_to_string(path).ok())
+    //     .map(|data| serde_json::from_str(&data))
+    //     .collect::<Result<Vec<Recording>, _>>()
+    // {
+    //     Ok(recodings) => *store.recordings_list.write() = recodings,
+    //     Err(_) => todo!(),
+    // }
 }
