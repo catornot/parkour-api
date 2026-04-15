@@ -81,7 +81,7 @@ function getMapName(map, returnOriginalNameIfUnknown = false) {
             return 'Pillars';
         case 'mp_colony02':
             return 'Colony';
-        case 'mp_complex03':
+        case 'mp_complex3':
             return 'Complex';
         case 'mp_crashsite3':
             return 'Crash Site';
