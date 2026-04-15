@@ -13,14 +13,6 @@
     <body>
         <div id="content">
             <nav>
-                <div id="event">
-                    <h1>{{event.name}}</h1>
-                    <p>{{event.description}}</p>
-                    <p class="description">
-                        From: {{date2 event.start}}<br/>
-                        To: {{date2 event.end}}
-                    </p>
-                </div>
                 <div id="routes">
                     <div id="routeSelector">
                         <div id="routeSelectorImageContainer">
@@ -33,10 +25,10 @@
                     <ul id="resultsList">
                         {{#each results}}
                         <li
-                            result_id="PK_{{this.id}}"
+                            result_id="PK_{{this.slug}}"
                             data-route-name="{{this.name}}"
                             data-map-name="{{this.map_name}}"
-                            onclick="displayTable('result_{{ this.id }}', '{{this.name}}', '{{this.map_name}}')"
+                            onclick="displayTable('result_{{ this.slug }}', '{{this.name}}', '{{this.map_name}}')"
                         >
                             Placeholder
                         </li>
@@ -66,7 +58,7 @@
             </nav>
             <div id="scores" data-simplebar>
                 {{#each results}}
-                <table id="result_{{this.id}}" result_id="{{this.id}}" class="result_scores">
+                <table id="result_{{this.slug}}" result_id="{{this.slug}}" class="result_scores">
                     <tr id="header">
                         <th>Position</th>
                         <th>Player name</th>

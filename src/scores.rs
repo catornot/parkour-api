@@ -1,11 +1,7 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
-use warp::{hyper::StatusCode, Filter, Rejection, Reply};
+use warp::{Filter, Rejection, Reply, hyper::StatusCode};
 
-use crate::Store;
-
-pub type ScoreEntries = HashMap<String, Vec<ScoreEntry>>;
+use crate::{Store, slug::slugify};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ScoreEntry {
@@ -20,16 +16,25 @@ pub struct ScoreEntry {
 struct ScoreRequest {
     uid: String,
     name: String,
-    time: f32,
+    time: f64,
 }
 
-/// Retrives scores list associated to a route id.
-///
-async fn get_list(route_id: String, store: Store) -> Result<impl Reply, Rejection> {
-    let scores_read_lock = store.scores_list.read();
-    if !scores_read_lock.contains_key(&route_id) {
+fn route_exists(store: &Store, map_name: &str, route_slug: &str) -> bool {
+    let routes = store.routes_list.read();
+    match routes.get(map_name) {
+        None => false,
+        Some(map_routes) => map_routes.iter().any(|r| slugify(&r.name) == route_slug),
+    }
+}
+
+async fn get_list(
+    map_name: String,
+    route_slug: String,
+    store: Store,
+) -> Result<impl Reply, Rejection> {
+    if !route_exists(&store, &map_name, &route_slug) {
         return Ok(warp::reply::with_status(
-            warp::reply::json(&"{\"message\": \"Route not found.\"}"),
+            warp::reply::json(&"Route not found."),
             StatusCode::NOT_FOUND,
         ));
     }
@@ -58,52 +63,50 @@ async fn get_list(route_id: String, store: Store) -> Result<impl Reply, Rejectio
         .collect();
 
     Ok(warp::reply::with_status(
-        warp::reply::json(&scores),
+        warp::reply::json(&entries),
         StatusCode::OK,
     ))
 }
 
-/// This middleware creates `Score` payloads from POST request bodies.
-///
-fn post_json() -> impl Filter<Extract = (ScoreEntry,), Error = Rejection> + Clone {
-    warp::body::content_length_limit(1024 * 16).and(warp::body::json())
-}
-
-/// Creates a score entry on a given route, based on its identifier.
-///
-async fn create_score_entry(
-    route_id: String,
-    entry: ScoreEntry,
+async fn create_score(
+    map_name: String,
+    route_slug: String,
+    body: ScoreRequest,
     store: Store,
 ) -> Result<impl Reply, Rejection> {
-    // Check if provided route exists
-    let scores_map: ScoreEntries = store.scores_list.read().clone();
-    let optional_scores = scores_map.get(&route_id);
-    if optional_scores.is_none() {
+    if !route_exists(&store, &map_name, &route_slug) {
         return Ok(warp::reply::with_status(
             warp::reply::json(&"Route not found."),
             StatusCode::NOT_FOUND,
         ));
     }
 
-    let mut scores = optional_scores.unwrap().clone().to_vec();
-    let index = scores
-        .iter()
-        .position(|e| e.name == entry.name)
-        .unwrap_or(usize::MAX);
-    if index != usize::MAX {
-        let existing_entry = &scores[index];
-        // If existing entry is better than new entry, we keep the new entry
-        if entry.time >= existing_entry.time {
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&"{\"message\": \"Leaderboard contains a better score entry for this player.\"}"),
-                StatusCode::ALREADY_REPORTED,
-            ));
-        }
-        // Else, we remove the existing entry
-        else {
-            scores.remove(index);
-        }
+    let db = store.db.lock();
+
+    // Upsert user (update name if it changed)
+    db.execute(
+        "INSERT INTO users (uid, name) VALUES (?1, ?2) \
+         ON CONFLICT(uid) DO UPDATE SET name = excluded.name",
+        rusqlite::params![body.uid, body.name],
+    )
+    .unwrap();
+
+    // Check existing best time
+    let existing: Option<f64> = db
+        .query_row(
+            "SELECT time FROM scores WHERE map_name = ?1 AND route_slug = ?2 AND uid = ?3",
+            rusqlite::params![map_name, route_slug, body.uid],
+            |row| row.get(0),
+        )
+        .ok();
+
+    if let Some(best) = existing
+        && body.time >= best
+    {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&"Leaderboard contains a better score for this player."),
+            StatusCode::ALREADY_REPORTED,
+        ));
     }
 
     let now = std::time::SystemTime::now()
@@ -123,15 +126,17 @@ async fn create_score_entry(
     ))
 }
 
-/// Returns all score-associated routes:
-///     * one route to list a route's scores;
-///     * one route to create scores on a given route.
-///
+fn post_json() -> impl Filter<Extract = (ScoreRequest,), Error = Rejection> + Clone {
+    warp::body::content_length_limit(1024 * 16).and(warp::body::json())
+}
+
 pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     let store_filter = warp::any().map(move || store.clone());
 
-    let scores_list_route = warp::get()
+    let list = warp::get()
         .and(warp::path("v1"))
+        .and(warp::path("maps"))
+        .and(warp::path::param())
         .and(warp::path("routes"))
         .and(warp::path::param())
         .and(warp::path("scores"))
@@ -139,15 +144,17 @@ pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = 
         .and(store_filter.clone())
         .and_then(get_list);
 
-    let score_creation_route = warp::post()
+    let create = warp::post()
         .and(warp::path("v1"))
+        .and(warp::path("maps"))
+        .and(warp::path::param())
         .and(warp::path("routes"))
         .and(warp::path::param())
         .and(warp::path("scores"))
         .and(warp::path::end())
         .and(post_json())
         .and(store_filter)
-        .and_then(create_score_entry);
+        .and_then(create_score);
 
-    scores_list_route.or(score_creation_route)
+    list.or(create)
 }

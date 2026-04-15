@@ -1,23 +1,16 @@
 use std::collections::HashMap;
-use uuid::Uuid;
-use warp::{hyper::StatusCode, Filter, Rejection, Reply};
+use warp::{Filter, Rejection, Reply, http::StatusCode};
 
-use crate::Store;
+use crate::{Store, slug::slugify};
 use serde::{Deserialize, Serialize};
 
 pub type MapRoutes = HashMap<String, Vec<MapRoute>>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Line {
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     angles: [i64; 3],
     dimensions: [i64; 2],
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     trigger: [[f64; 3]; 2],
 }
 
@@ -85,7 +78,6 @@ struct MapObject {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MapRoute {
-    pub id: Option<String>,
     pub name: String,
     #[serde(default)]
     pub default: bool,
@@ -103,58 +95,41 @@ pub struct MapRoute {
     entities: Option<Vec<MapObject>>,
 }
 
-#[derive(Deserialize, Default)]
-struct EditQuery {
-    reason: Option<String>,
-}
-
-/// This middleware creates `MapRoute` payloads from POST request bodies.
-///
 pub fn post_json() -> impl Filter<Extract = (MapRoute,), Error = Rejection> + Clone {
     warp::body::content_length_limit(1024 * 16).and(warp::body::json())
 }
 
-/// Creates a map route, based on its map identifier.
-///
 async fn create_map_route(
-    map_id: String,
+    map_name: String,
     mut entry: MapRoute,
     store: Store,
 ) -> Result<impl Reply, Rejection> {
-    // Check if provided map exists
-    let routes_list = store.routes_list.read().clone();
-    let map_routes = routes_list.get(&map_id);
-    if map_routes.is_none() {
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&"Map not found."),
-            StatusCode::NOT_FOUND,
-        ));
-    }
+    let routes_list = store.routes_list.read();
+    let map_routes = match routes_list.get(&map_name) {
+        Some(r) => r,
+        None => {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&"Map not found."),
+                StatusCode::NOT_FOUND,
+            ));
+        }
+    };
 
-    let mut routes = map_routes.unwrap().clone();
-    let index = routes
-        .iter()
-        .position(|route| route.name == entry.name)
-        .unwrap_or(usize::MAX);
-    if index != usize::MAX {
+    let slug = slugify(&entry.name);
+    let exists = map_routes.iter().any(|r| slugify(&r.name) == slug);
+    if exists {
         return Ok(warp::reply::with_status(
-            warp::reply::json(&"{\"error\": \"Route name already used.\"}"),
+            warp::reply::json(&"Route name already used."),
             StatusCode::ALREADY_REPORTED,
         ));
     }
 
-    // Insert new route
-    let route_id = Uuid::new_v4().to_string();
-    entry.id = Some(route_id.clone());
     if entry.perks.is_none() {
         entry.perks = Some(HashMap::new());
     }
     if entry.entities.is_none() {
         entry.entities = Some(Vec::new());
     }
-    routes.push(entry);
-    let mut write_lock = store.routes_list.write();
-    write_lock.insert(map_id, routes);
 
     drop(routes_list);
     let mut routes_write = store.routes_list.write();
@@ -171,9 +146,14 @@ async fn create_map_route(
     crate::log::route_change("created", &map_name, &entry.name, &slug, None);
 
     Ok(warp::reply::with_status(
-        warp::reply::json(&"Map route created."),
+        warp::reply::json(&slug),
         StatusCode::CREATED,
     ))
+}
+
+#[derive(Deserialize, Default)]
+struct EditQuery {
+    reason: Option<String>,
 }
 
 async fn edit_map_route(
@@ -253,35 +233,24 @@ async fn edit_map_route(
 
 async fn get_map_routes(map_name: String, store: Store) -> Result<impl Reply, Rejection> {
     let routes_read_lock = store.routes_list.read();
-    if !routes_read_lock.contains_key(&map_id) {
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&"Route not found."),
+    match routes_read_lock.get(&map_name) {
+        None => Ok(warp::reply::with_status(
+            warp::reply::json(&"Map not found."),
             StatusCode::NOT_FOUND,
-        ));
-        // )),
-        // Some(routes) => {
-        //     let map: HashMap<String, serde_json::Value> = routes
-        //         .iter()
-        //         .map(|r| (slugify(&r.name), serde_json::to_value(r).unwrap()))
-        //         .collect();
-        //     Ok(warp::reply::with_status(
-        //         warp::reply::json(&map),
-        //         StatusCode::OK,
-        //     ))
-        // }
+        )),
+        Some(routes) => {
+            let map: HashMap<String, serde_json::Value> = routes
+                .iter()
+                .map(|r| (slugify(&r.name), serde_json::to_value(r).unwrap()))
+                .collect();
+            Ok(warp::reply::with_status(
+                warp::reply::json(&map),
+                StatusCode::OK,
+            ))
+        }
     }
-
-    let routes = routes_read_lock.get(&map_id).unwrap();
-    Ok(warp::reply::with_status(
-        warp::reply::json(&routes),
-        StatusCode::OK,
-    ))
 }
 
-/// Returns all map routing routes:
-///     * one route to get a map's routes;
-///     * one route to create map routes.
-///
 pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     let store_filter = warp::any().map(move || store.clone());
 

@@ -1,121 +1,65 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use warp::{hyper::StatusCode, Filter, Rejection, Reply};
+use warp::{Filter, Rejection, Reply, http::StatusCode};
 
-use crate::{event::Event, Store};
+use crate::Store;
 
-pub type Maps = HashMap<String, Vec<Map>>;
+// Maps is just an ordered list of known map names for listing purposes.
+// The routes_list HashMap is the authoritative source; this list mirrors its keys.
+pub type Maps = Vec<String>;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Map {
-    pub map_name: String,
-    pub id: Option<String>,
+#[derive(Debug, Deserialize, Serialize)]
+struct CreateMapRequest {
+    map_name: String,
 }
 
-/// Gets the list of maps associated to a given event.
-///
-async fn get_list(event_id: String, store: Store) -> Result<impl Reply, Rejection> {
-    // Checking for existing event
-    let events: Vec<Event> = store.events_list.read().to_vec();
-    let index = events
-        .iter()
-        .position(|e| e.id.clone().unwrap() == event_id)
-        .unwrap_or(usize::MAX);
-    if index == usize::MAX {
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&"{\"error\": \"Event not found.\"}"),
-            StatusCode::NOT_FOUND,
-        ));
-    }
-
-    let read_lock = store.maps_list.read();
-    let maps = read_lock.get(&event_id).unwrap();
-    Ok(warp::reply::with_status(
-        warp::reply::json(&maps),
-        StatusCode::OK,
-    ))
+async fn get_list(store: Store) -> Result<impl Reply, Rejection> {
+    let r = store.maps_list.read();
+    Ok(warp::reply::json(&*r))
 }
 
-/// Creates a map that's associated to the input event.
-///
-async fn create_map(event_id: String, entry: Map, store: Store) -> Result<impl Reply, Rejection> {
-    // Check if the event exists
-    let events: Vec<Event> = store.events_list.read().to_vec();
-    let index = events
-        .iter()
-        .position(|e| e.id.clone().unwrap() == event_id)
-        .unwrap_or(usize::MAX);
-    if index == usize::MAX {
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&"{\"error\": \"Event not found.\"}"),
-            StatusCode::NOT_FOUND,
-        ));
-    }
+async fn create_map(body: CreateMapRequest, store: Store) -> Result<impl Reply, Rejection> {
+    let map_name = body.map_name.trim().to_string();
 
-    // Checking for existing map
-    let mut maps: Vec<Map> = store.maps_list.read().get(&event_id).unwrap().to_vec();
-    let index = maps
-        .iter()
-        .position(|e| e.map_name == entry.map_name)
-        .unwrap_or(usize::MAX);
-    if index != usize::MAX {
+    if store.routes_list.read().contains_key(&map_name) {
         return Ok(warp::reply::with_status(
-            warp::reply::json(&"{\"error\": \"Map already exists.\"}"),
+            warp::reply::json(&"Map already exists."),
             StatusCode::ALREADY_REPORTED,
         ));
     }
 
-    let map_id = Uuid::new_v4().to_string();
-    let mut write_lock = store.maps_list.write();
-    maps.push(Map {
-        map_name: entry.map_name,
-        id: Some(map_id.clone()),
-    });
-    write_lock.insert(event_id, maps);
-
-    // Create associated routes array
-    let mut routes_write_lock = store.routes_list.write();
-    routes_write_lock.insert(map_id, [].to_vec());
+    store
+        .routes_list
+        .write()
+        .insert(map_name.clone(), Vec::new());
+    store.maps_list.write().push(map_name);
 
     Ok(warp::reply::with_status(
-        warp::reply::json(&"{\"message\": \"Map successfully created.\"}"),
+        warp::reply::json(&"Map created."),
         StatusCode::CREATED,
     ))
 }
 
-/// This middleware creates `Map` payloads from POST request bodies.
-///
-pub fn post_json() -> impl Filter<Extract = (Map,), Error = Rejection> + Clone {
+fn post_json() -> impl Filter<Extract = (CreateMapRequest,), Error = Rejection> + Clone {
     warp::body::content_length_limit(1024 * 16).and(warp::body::json())
 }
 
-/// Returns all map-associated routes:
-///     * one route to list an event's maps;
-///     * one route to create maps on a given event.
-///
 pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     let store_filter = warp::any().map(move || store.clone());
 
-    let map_list_route = warp::get()
+    let list = warp::get()
         .and(warp::path("v1"))
-        .and(warp::path("events"))
-        .and(warp::path::param())
         .and(warp::path("maps"))
         .and(warp::path::end())
         .and(store_filter.clone())
         .and_then(get_list);
 
-    let map_creation_route = warp::post()
+    let create = warp::post()
         .and(warp::path("v1"))
-        .and(warp::path("events"))
-        .and(warp::path::param())
         .and(warp::path("maps"))
         .and(warp::path::end())
         .and(post_json())
         .and(store_filter)
         .and_then(create_map);
 
-    map_list_route.or(map_creation_route)
+    list.or(create)
 }

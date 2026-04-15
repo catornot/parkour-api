@@ -1,34 +1,32 @@
-mod event;
 pub mod log;
 pub mod map;
 mod persistence;
 pub mod route;
 mod scoreboard;
 mod scores;
+pub mod slug;
 
-use event::Events;
 use map::Maps;
-use parking_lot::RwLock;
-use persistence::{load_state, start_save_cron};
+use parking_lot::{Mutex, RwLock};
+use persistence::{init_db, load_state, start_save_cron};
 use route::MapRoutes;
-use std::{collections::HashMap, env, sync::Arc};
+use rusqlite::Connection;
+use std::{env, sync::Arc};
 use warp::Filter;
 
 #[derive(Clone)]
 pub struct Store {
-    events_list: Arc<RwLock<Events>>,
-    scores_list: Arc<RwLock<scores::ScoreEntries>>,
     maps_list: Arc<RwLock<Maps>>,
     routes_list: Arc<RwLock<MapRoutes>>,
+    db: Arc<Mutex<Connection>>,
 }
 
 impl Store {
-    fn new() -> Self {
+    fn new(db: Connection) -> Self {
         Store {
-            events_list: Arc::new(RwLock::new(Vec::new())),
-            scores_list: Arc::new(RwLock::new(HashMap::new())),
-            maps_list: Arc::new(RwLock::new(HashMap::new())),
-            routes_list: Arc::new(RwLock::new(HashMap::new())),
+            maps_list: Arc::new(RwLock::new(Vec::new())),
+            routes_list: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            db: Arc::new(Mutex::new(db)),
         }
     }
 }
@@ -48,28 +46,20 @@ async fn main() {
     let header_value = Box::leak(secret.into_boxed_str());
     let accept_requests = warp::header::exact("authentication", header_value);
 
-    let store = Store::new();
+    let db = init_db();
+    let store = Store::new(db);
 
-    // If scores were previously saved to file, restore them
     load_state(store.clone());
-    // Scores saving cron
     start_save_cron(store.clone());
 
     // Routes
     let map_routes = map::get_routes(store.clone());
-    let event_routes = event::get_routes(store.clone());
     let score_routes = scores::get_routes(store.clone());
     let map_route_routes = route::get_routes(store.clone());
-    let routes = event_routes
-        .or(map_routes)
-        .or(score_routes)
-        .or(map_route_routes);
+    let scoreboard_route = scoreboard::get_routes(store.clone());
 
-    // Authentication middleware
-    let api_routes = accept_requests.and(routes);
-
-    // Serve scoreboard route only if there are registered events
-    let scoreboard_route = scoreboard::get_routes(store);
+    let api_routes = map_routes.or(score_routes).or(map_route_routes);
+    let api_routes = accept_requests.and(api_routes);
 
     let admin_page = warp::path("admin")
         .and(warp::path::end())
