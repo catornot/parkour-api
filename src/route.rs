@@ -168,6 +168,17 @@ async fn get_map_routes(map_id: String, store: Store) -> Result<impl Reply, Reje
             warp::reply::json(&"Route not found."),
             StatusCode::NOT_FOUND,
         ));
+        // )),
+        // Some(routes) => {
+        //     let map: HashMap<String, serde_json::Value> = routes
+        //         .iter()
+        //         .map(|r| (slugify(&r.name), serde_json::to_value(r).unwrap()))
+        //         .collect();
+        //     Ok(warp::reply::with_status(
+        //         warp::reply::json(&map),
+        //         StatusCode::OK,
+        //     ))
+        // }
     }
 
     let routes = routes_read_lock.get(&map_id).unwrap();
