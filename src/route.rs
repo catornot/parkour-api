@@ -87,6 +87,8 @@ struct MapObject {
 pub struct MapRoute {
     pub id: Option<String>,
     pub name: String,
+    #[serde(default)]
+    pub default: bool,
     start_line: Line,
     finish_line: Line,
     leaderboards: Leaderboards,
@@ -99,6 +101,11 @@ pub struct MapRoute {
     indicator: StartIndicator,
     route_name: RouteName,
     entities: Option<Vec<MapObject>>,
+}
+
+#[derive(Deserialize, Default)]
+struct EditQuery {
+    reason: Option<String>,
 }
 
 /// This middleware creates `MapRoute` payloads from POST request bodies.
@@ -149,9 +156,19 @@ async fn create_map_route(
     let mut write_lock = store.routes_list.write();
     write_lock.insert(map_id, routes);
 
-    // Create associated scores
-    let mut scores_write_lock = store.scores_list.write();
-    scores_write_lock.insert(route_id, [].to_vec());
+    drop(routes_list);
+    let mut routes_write = store.routes_list.write();
+    let map_routes = routes_write.get_mut(&map_name).unwrap();
+
+    if entry.default {
+        for r in map_routes.iter_mut() {
+            r.default = false;
+        }
+    }
+
+    map_routes.push(entry.clone());
+
+    crate::log::route_change("created", &map_name, &entry.name, &slug, None);
 
     Ok(warp::reply::with_status(
         warp::reply::json(&"Map route created."),
@@ -159,9 +176,82 @@ async fn create_map_route(
     ))
 }
 
-/// Get map routes.
-///
-async fn get_map_routes(map_id: String, store: Store) -> Result<impl Reply, Rejection> {
+async fn edit_map_route(
+    map_name: String,
+    route_slug: String,
+    query: EditQuery,
+    mut entry: MapRoute,
+    store: Store,
+) -> Result<impl Reply, Rejection> {
+    let mut routes_list = store.routes_list.write();
+    let map_routes = match routes_list.get_mut(&map_name) {
+        Some(r) => r,
+        None => {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&"Map not found."),
+                StatusCode::NOT_FOUND,
+            ));
+        }
+    };
+
+    let idx = match map_routes
+        .iter()
+        .position(|r| slugify(&r.name) == route_slug)
+    {
+        Some(i) => i,
+        None => {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&"Route not found."),
+                StatusCode::NOT_FOUND,
+            ));
+        }
+    };
+
+    // Check if the new name conflicts with a different existing route.
+    let new_slug = slugify(&entry.name);
+    let conflict = map_routes
+        .iter()
+        .enumerate()
+        .any(|(i, r)| i != idx && slugify(&r.name) == new_slug);
+    if conflict {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&"Route name already used."),
+            StatusCode::ALREADY_REPORTED,
+        ));
+    }
+
+    if entry.perks.is_none() {
+        entry.perks = Some(HashMap::new());
+    }
+    if entry.entities.is_none() {
+        entry.entities = Some(Vec::new());
+    }
+
+    if entry.default {
+        for (i, r) in map_routes.iter_mut().enumerate() {
+            if i != idx {
+                r.default = false;
+            }
+        }
+    }
+
+    map_routes[idx] = entry.clone();
+
+    crate::log::route_change(
+        "edited",
+        &map_name,
+        &entry.name,
+        &new_slug,
+        query.reason.as_deref(),
+    );
+
+    Ok(warp::reply::with_status(
+        warp::reply::json(&new_slug),
+        StatusCode::OK,
+    ))
+}
+
+async fn get_map_routes(map_name: String, store: Store) -> Result<impl Reply, Rejection> {
     let routes_read_lock = store.routes_list.read();
     if !routes_read_lock.contains_key(&map_id) {
         return Ok(warp::reply::with_status(
@@ -195,7 +285,7 @@ async fn get_map_routes(map_id: String, store: Store) -> Result<impl Reply, Reje
 pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     let store_filter = warp::any().map(move || store.clone());
 
-    let route_creation_route = warp::post()
+    let create = warp::post()
         .and(warp::path("v1"))
         .and(warp::path("maps"))
         .and(warp::path::param())
@@ -205,14 +295,26 @@ pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = 
         .and(store_filter.clone())
         .and_then(create_map_route);
 
-    let get_routes_route = warp::get()
+    let list = warp::get()
         .and(warp::path("v1"))
         .and(warp::path("maps"))
         .and(warp::path::param())
         .and(warp::path("routes"))
         .and(warp::path::end())
-        .and(store_filter)
+        .and(store_filter.clone())
         .and_then(get_map_routes);
 
-    route_creation_route.or(get_routes_route)
+    let edit = warp::put()
+        .and(warp::path("v1"))
+        .and(warp::path("maps"))
+        .and(warp::path::param())
+        .and(warp::path("routes"))
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and(warp::query::<EditQuery>())
+        .and(post_json())
+        .and(store_filter)
+        .and_then(edit_map_route);
+
+    create.or(list).or(edit)
 }

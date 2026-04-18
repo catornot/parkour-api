@@ -14,11 +14,42 @@ const MAPS_FILE: &str = "data/maps.json";
 const SCORES_FILE: &str = "data/scores.json";
 const ROUTES_FILE: &str = "data/routes.json";
 
+/// Opens (or creates) the SQLite database and runs schema migrations.
+pub fn init_db() -> Connection {
+    create_dir_all("data").expect("Failed to create data directory");
+    let conn = Connection::open(DB_FILE).expect("Failed to open SQLite database");
+
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS users (
+            uid  TEXT PRIMARY KEY,
+            name TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS scores (
+            map_name   TEXT NOT NULL,
+            route_slug TEXT NOT NULL,
+            uid        TEXT NOT NULL,
+            time       REAL NOT NULL,
+            timestamp  INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+            PRIMARY KEY (map_name, route_slug, uid),
+            FOREIGN KEY (uid) REFERENCES users(uid)
+        );",
+    )
+    .expect("Failed to initialize database schema");
+
+    // Migration for existing databases without the timestamp column
+    let _ = conn.execute_batch(
+        "ALTER TABLE scores ADD COLUMN timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now'));",
+    );
+
+    conn
+}
+
 /// Starts a thread that will save store state to JSON files every few seconds.
 ///
 /// The time between two consecutive saves is 15 minutes by default, and can be
 /// customized with the `PARKOUR_API_SAVE_TIMER` environment variable.
 ///
+/// Saves routes to JSON on a background thread at a configurable interval.
 pub fn start_save_cron(store: Store) {
     let cron_interval_minutes: u64 = match env::var("PARKOUR_API_SAVE_TIMER") {
         Ok(s) => {

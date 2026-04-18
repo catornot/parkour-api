@@ -24,21 +24,50 @@ struct RouteResult {
 }
 
 fn render(hbs: Arc<Handlebars<'_>>, store: Store) -> impl warp::Reply {
-    // Find current event
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    let events = store.clone().events_list.read().clone().into_iter();
-    let corresponding_events: Vec<Event> = events
-        .filter(|e| now >= e.start.try_into().unwrap() && now <= e.end.try_into().unwrap())
-        .collect();
-    if corresponding_events.len() != 1 {
-        log::error(&format!(
-            "Expected one corresponding event, found {}.",
-            corresponding_events.len()
-        ));
-        std::process::exit(42);
+    let routes_snapshot = store.routes_list.read().clone();
+    let db = store.db.lock();
+
+    let mut results: Vec<RouteResult> = Vec::new();
+
+    // Iterate maps in insertion order (maps_list preserves it)
+    for map_name in store.maps_list.read().iter() {
+        let map_routes = match routes_snapshot.get(map_name) {
+            Some(r) => r,
+            None => continue,
+        };
+
+        for route in map_routes {
+            let route_slug = slugify(&route.name);
+
+            let mut stmt = db
+                .prepare(
+                    "SELECT s.uid, u.name, s.time, s.timestamp \
+                     FROM scores s JOIN users u ON s.uid = u.uid \
+                     WHERE s.map_name = ?1 AND s.route_slug = ?2 \
+                     ORDER BY s.time ASC",
+                )
+                .unwrap();
+
+            let scores: Vec<ScoreEntry> = stmt
+                .query_map([map_name.as_str(), route_slug.as_str()], |row| {
+                    Ok(ScoreEntry {
+                        uid: row.get(0)?,
+                        name: row.get(1)?,
+                        time: row.get(2)?,
+                        timestamp: row.get(3)?,
+                    })
+                })
+                .unwrap()
+                .filter_map(|r| r.ok())
+                .collect();
+
+            results.push(RouteResult {
+                slug: route_slug,
+                name: route.name.clone(),
+                map_name: map_name.clone(),
+                scores,
+            });
+        }
     }
 
     // Find associated maps

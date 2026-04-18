@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parkour Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #141a32;
+      color: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 0.95rem;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      background: #212B4E;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+      border-bottom: 2px solid #141a32;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-right: auto;
+    }
+
+    header label {
+      font-size: 0.85rem;
+      opacity: 0.7;
+    }
+
+    header input[type="password"] {
+      background: #141a32;
+      border: 1px solid #37405D;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 4px;
+      width: 220px;
+      font-size: 0.9rem;
+    }
+
+    header input[type="password"]:focus { outline: 1px solid #6b84c8; }
+
+    button {
+      background: #37405D;
+      color: #fff;
+      border: none;
+      padding: 7px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    button:hover { background: #4a5578; }
+    button.primary { background: #3a5ea8; }
+    button.primary:hover { background: #4a72c8; }
+    button.danger { background: #7a2020; }
+    button.danger:hover { background: #9a2828; }
+
+    #main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Left panel */
+    #sidebar {
+      width: 280px;
+      flex-shrink: 0;
+      background: #212B4E;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 2px solid #141a32;
+    }
+
+    #sidebar-inner {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    #sidebar label {
+      font-size: 0.8rem;
+      opacity: 0.65;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    select {
+      background: #141a32;
+      border: 1px solid #37405D;
+      color: #fff;
+      padding: 7px 10px;
+      border-radius: 4px;
+      width: 100%;
+      font-size: 0.9rem;
+    }
+    select:focus { outline: 1px solid #6b84c8; }
+
+    #route-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    #route-list li {
+      background: #20263C;
+      border-radius: 4px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.88rem;
+    }
+    #route-list li:nth-child(even) { background: #2C3147; }
+    #route-list li .route-name { flex: 1; word-break: break-all; }
+    #route-list li button { padding: 4px 10px; font-size: 0.8rem; flex-shrink: 0; }
+
+    #sidebar-actions {
+      padding: 14px;
+      border-top: 1px solid #37405D;
+      flex-shrink: 0;
+    }
+
+    #sidebar-actions button { width: 100%; }
+
+    #loading-msg {
+      font-size: 0.85rem;
+      opacity: 0.5;
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    /* Right panel - editor */
+    #editor-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 16px;
+      gap: 10px;
+    }
+
+    #editor-panel h2 {
+      font-size: 1rem;
+      font-weight: normal;
+      opacity: 0.8;
+    }
+
+    #editor-panel h2 span {
+      font-weight: bold;
+      opacity: 1;
+      color: #aac0f8;
+    }
+
+    textarea#json-input {
+      flex: 1;
+      background: #0e1224;
+      color: #c8d8f8;
+      border: 1px solid #37405D;
+      border-radius: 6px;
+      padding: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      resize: none;
+      line-height: 1.5;
+    }
+    textarea#json-input:focus { outline: 1px solid #6b84c8; }
+
+    #error-box {
+      background: #5a1a1a;
+      border: 1px solid #a04040;
+      border-radius: 4px;
+      padding: 10px 14px;
+      font-size: 0.88rem;
+      display: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #success-box {
+      background: #1a4a2a;
+      border: 1px solid #40a060;
+      border-radius: 4px;
+      padding: 10px 14px;
+      font-size: 0.88rem;
+      display: none;
+    }
+
+    #reason-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #reason-row label {
+      font-size: 0.8rem;
+      opacity: 0.65;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      white-space: nowrap;
+    }
+
+    #reason-input {
+      flex: 1;
+      background: #141a32;
+      border: 1px solid #37405D;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    #reason-input:focus { outline: 1px solid #6b84c8; }
+
+    #editor-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    #placeholder {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.3;
+      font-size: 1.1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Parkour Admin</h1>
+  <label for="secret-input">Secret</label>
+  <input type="password" id="secret-input" placeholder="API secret key" autocomplete="off">
+  <button onclick="loadMaps()">Load</button>
+</header>
+
+<div id="main">
+  <div id="sidebar">
+    <div id="sidebar-inner">
+      <div>
+        <label>Map</label>
+        <select id="map-select" onchange="loadRoutes()" style="margin-top:6px;">
+          <option value="">select a map</option>
+        </select>
+      </div>
+      <div>
+        <label>Routes</label>
+        <ul id="route-list" style="margin-top:6px;">
+          <li id="loading-msg">Load data to begin</li>
+        </ul>
+      </div>
+    </div>
+    <div id="sidebar-actions">
+      <button class="primary" onclick="newRoute()">+ New Route</button>
+    </div>
+  </div>
+
+  <div id="editor-panel">
+    <div id="placeholder">Select or create a route</div>
+    <!-- Editor contents are injected by JS when a route is selected -->
+  </div>
+</div>
+
+<script>
+  // ---- State ----
+  let secret = '';
+  let currentMap = '';
+  let editMode = null; // null = new, string = slug being edited
+  let routeCache = {}; // map name -> { slug: routeData }
+
+  // ---- Required top-level fields ----
+  const REQUIRED_FIELDS = [
+    'name', 'start_line', 'finish_line', 'leaderboards',
+    'checkpoints', 'start', 'end', 'ziplines',
+    'robot', 'indicator', 'route_name'
+  ];
+
+  // ---- Skeleton template for new routes ----
+  const ROUTE_TEMPLATE = {
+    name: "Route Name",
+    start_line: {
+      origin: [0.0, 0.0, 0.0],
+      angles: [0, 0, 0],
+      dimensions: [100, 100],
+      trigger: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+    },
+    finish_line: {
+      origin: [0.0, 0.0, 0.0],
+      angles: [0, 0, 0],
+      dimensions: [100, 100],
+      trigger: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+    },
+    leaderboards: {
+      local: {
+        origin: [0.0, 0.0, 0.0],
+        angles: [0, 0, 0],
+        dimensions: [100, 100],
+        source: { origin: [0.0, 0.0, 0.0], angles: [0, 0, 0], dimensions: [100, 100] }
+      },
+      world: {
+        origin: [0.0, 0.0, 0.0],
+        angles: [0, 0, 0],
+        dimensions: [100, 100],
+        source: { origin: [0.0, 0.0, 0.0], angles: [0, 0, 0], dimensions: [100, 100] }
+      }
+    },
+    checkpoints: [],
+    start: { origin: [0.0, 0.0, 0.0], angles: [0, 0, 0] },
+    end: { origin: [0.0, 0.0, 0.0] },
+    ziplines: [],
+    perks: {},
+    robot: {
+      origin: [0.0, 0.0, 0.0],
+      angles: [0, 0, 0],
+      talkable_radius: 200,
+      animation: "mv_idle_wash_window"
+    },
+    indicator: { coordinates: [0.0, 0.0, 0.0], trigger_radius: 100 },
+    route_name: { origin: [0.0, 0.0, 0.0], angles: [0, 0, 0], dimensions: [100, 100] },
+    entities: []
+  };
+
+  // ---- API helpers ----
+  function getSecret() {
+    return document.getElementById('secret-input').value.trim();
+  }
+
+  async function apiFetch(method, path, body) {
+    const s = getSecret();
+    const opts = {
+      method,
+      headers: { 'authentication': s, 'Content-Type': 'application/json' }
+    };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    const resp = await fetch(path, opts);
+    const text = await resp.text();
+    return { ok: resp.ok, status: resp.status, text };
+  }
+
+  // ---- Map loading ----
+  async function loadMaps() {
+    const sel = document.getElementById('map-select');
+    sel.innerHTML = '<option value="">loading...</option>';
+    document.getElementById('route-list').innerHTML = '<li id="loading-msg">Loading...</li>';
+
+    const { ok, text } = await apiFetch('GET', '/v1/maps');
+    if (!ok) {
+      showLoadError('Failed to load maps: ' + text);
+      return;
+    }
+    const maps = JSON.parse(text);
+    sel.innerHTML = '<option value="">select a map</option>';
+    maps.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m;
+      sel.appendChild(opt);
+    });
+    document.getElementById('route-list').innerHTML = '<li id="loading-msg">Select a map</li>';
+  }
+
+  function showLoadError(msg) {
+    document.getElementById('route-list').innerHTML =
+      `<li id="loading-msg" style="color:#f87070;">${msg}</li>`;
+  }
+
+  // ---- Route loading ----
+  async function loadRoutes() {
+    const sel = document.getElementById('map-select');
+    currentMap = sel.value;
+    if (!currentMap) return;
+
+    document.getElementById('route-list').innerHTML = '<li id="loading-msg">Loading...</li>';
+    routeCache[currentMap] = null;
+
+    const { ok, text } = await apiFetch('GET', `/v1/maps/${encodeURIComponent(currentMap)}/routes`);
+    if (!ok) {
+      showLoadError('Failed to load routes: ' + text);
+      return;
+    }
+    const routes = JSON.parse(text);
+    routeCache[currentMap] = routes;
+    renderRouteList(routes);
+  }
+
+  function renderRouteList(routes) {
+    const ul = document.getElementById('route-list');
+    const slugs = Object.keys(routes);
+    if (slugs.length === 0) {
+      ul.innerHTML = '<li id="loading-msg">No routes yet</li>';
+      return;
+    }
+    ul.innerHTML = '';
+    slugs.forEach(slug => {
+      const li = document.createElement('li');
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'route-name';
+      nameSpan.textContent = routes[slug].name || slug;
+      const btn = document.createElement('button');
+      btn.textContent = 'Edit';
+      btn.onclick = () => editRoute(slug, routes[slug]);
+      li.appendChild(nameSpan);
+      li.appendChild(btn);
+      ul.appendChild(li);
+    });
+  }
+
+  // ---- Editor ----
+  function showEditor(title, jsonData, slug) {
+    editMode = slug; // null = new, string = editing existing slug
+    const isEdit = slug !== null;
+    const panel = document.getElementById('editor-panel');
+    panel.innerHTML = `
+      <h2>Route: <span id="editor-title">${escapeHtml(title)}</span></h2>
+      <textarea id="json-input" spellcheck="false"></textarea>
+      ${isEdit ? `<div id="reason-row">
+        <label for="reason-input">Reason for change</label>
+        <input type="text" id="reason-input" placeholder="Optional, describe what changed">
+      </div>` : ''}
+      <div id="error-box"></div>
+      <div id="success-box"></div>
+      <div id="editor-actions">
+        <button class="primary" onclick="submitRoute()">Submit</button>
+        <button onclick="clearEditor()">Cancel</button>
+      </div>
+    `;
+    document.getElementById('json-input').value = JSON.stringify(jsonData, null, 2);
+  }
+
+  function newRoute() {
+    if (!currentMap) {
+      alert('Select a map first.');
+      return;
+    }
+    showEditor('New Route', ROUTE_TEMPLATE, null);
+  }
+
+  function editRoute(slug, data) {
+    showEditor(data.name || slug, data, slug);
+  }
+
+  function clearEditor() {
+    editMode = null;
+    const panel = document.getElementById('editor-panel');
+    panel.innerHTML = '<div id="placeholder">Select or create a route</div>';
+  }
+
+  // ---- Validation ----
+  function validateRoute(obj) {
+    const errors = [];
+
+    for (const field of REQUIRED_FIELDS) {
+      if (!(field in obj) || obj[field] === null || obj[field] === undefined) {
+        errors.push(`Missing required field: "${field}"`);
+      }
+    }
+    if (errors.length) return errors;
+
+    if (typeof obj.name !== 'string' || obj.name.trim() === '') {
+      errors.push('"name" must be a non-empty string');
+    }
+
+    // start_line / finish_line
+    for (const lineField of ['start_line', 'finish_line']) {
+      const line = obj[lineField];
+      if (typeof line !== 'object' || Array.isArray(line)) {
+        errors.push(`"${lineField}" must be an object`);
+        continue;
+      }
+      for (const sub of ['origin', 'angles', 'dimensions', 'trigger']) {
+        if (!Array.isArray(line[sub])) errors.push(`"${lineField}.${sub}" must be an array`);
+      }
+    }
+
+    // leaderboards
+    const lb = obj.leaderboards;
+    if (typeof lb !== 'object' || Array.isArray(lb)) {
+      errors.push('"leaderboards" must be an object');
+    } else {
+      for (const side of ['local', 'world']) {
+        if (!lb[side] || typeof lb[side] !== 'object') {
+          errors.push(`"leaderboards.${side}" must be an object`);
+        } else if (!lb[side].source || typeof lb[side].source !== 'object') {
+          errors.push(`"leaderboards.${side}.source" must be an object`);
+        }
+      }
+    }
+
+    if (!Array.isArray(obj.checkpoints)) errors.push('"checkpoints" must be an array');
+    if (!Array.isArray(obj.ziplines))    errors.push('"ziplines" must be an array');
+
+    const start = obj.start;
+    if (!start || typeof start !== 'object' || !Array.isArray(start.origin) || !Array.isArray(start.angles)) {
+      errors.push('"start" must have "origin" and "angles" arrays');
+    }
+    const end = obj.end;
+    if (!end || typeof end !== 'object' || !Array.isArray(end.origin)) {
+      errors.push('"end" must have an "origin" array');
+    }
+
+    const robot = obj.robot;
+    if (!robot || typeof robot !== 'object') {
+      errors.push('"robot" must be an object');
+    } else {
+      for (const sub of ['origin', 'angles']) {
+        if (!Array.isArray(robot[sub])) errors.push(`"robot.${sub}" must be an array`);
+      }
+      if (typeof robot.talkable_radius !== 'number') errors.push('"robot.talkable_radius" must be a number');
+      if (typeof robot.animation !== 'string')        errors.push('"robot.animation" must be a string');
+    }
+
+    const ind = obj.indicator;
+    if (!ind || typeof ind !== 'object') {
+      errors.push('"indicator" must be an object');
+    } else {
+      if (!Array.isArray(ind.coordinates))     errors.push('"indicator.coordinates" must be an array');
+      if (typeof ind.trigger_radius !== 'number') errors.push('"indicator.trigger_radius" must be a number');
+    }
+
+    const rn = obj.route_name;
+    if (!rn || typeof rn !== 'object') {
+      errors.push('"route_name" must be an object');
+    } else {
+      for (const sub of ['origin', 'angles', 'dimensions']) {
+        if (!Array.isArray(rn[sub])) errors.push(`"route_name.${sub}" must be an array`);
+      }
+    }
+
+    return errors;
+  }
+
+  // ---- Submit ----
+  async function submitRoute() {
+    const textarea = document.getElementById('json-input');
+    if (!textarea) return;
+
+    hideMessages();
+
+    // Parse JSON
+    let parsed;
+    try {
+      parsed = JSON.parse(textarea.value);
+    } catch (e) {
+      showError('JSON syntax error: ' + e.message);
+      return;
+    }
+
+    // Validate structure
+    const errors = validateRoute(parsed);
+    if (errors.length) {
+      showError('Validation errors:\n' + errors.map(e => '  • ' + e).join('\n'));
+      return;
+    }
+
+    if (!currentMap) {
+      showError('No map selected.');
+      return;
+    }
+
+    let method, url;
+    if (editMode === null) {
+      method = 'POST';
+      url = `/v1/maps/${encodeURIComponent(currentMap)}/routes`;
+    } else {
+      method = 'PUT';
+      url = `/v1/maps/${encodeURIComponent(currentMap)}/routes/${encodeURIComponent(editMode)}`;
+      const reasonEl = document.getElementById('reason-input');
+      const reason = reasonEl ? reasonEl.value.trim() : '';
+      if (reason) url += `?reason=${encodeURIComponent(reason)}`;
+    }
+
+    const { ok, status, text } = await apiFetch(method, url, parsed);
+
+    if (!ok) {
+      let msg;
+      try { msg = JSON.parse(text); } catch { msg = text; }
+      showError(`API error (${status}): ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`);
+      return;
+    }
+
+    let newSlug;
+    try { newSlug = JSON.parse(text); } catch { newSlug = text; }
+
+    showSuccess(editMode === null
+      ? `Route created with slug "${newSlug}".`
+      : `Route updated (slug: "${newSlug}").`
+    );
+
+    // Update edit mode to new slug in case name changed
+    editMode = newSlug;
+    document.getElementById('editor-title').textContent =
+      parsed.name || newSlug;
+
+    // Refresh route list
+    await loadRoutes();
+  }
+
+  // ---- UI helpers ----
+  function showError(msg) {
+    const box = document.getElementById('error-box');
+    if (!box) return;
+    box.textContent = msg;
+    box.style.display = 'block';
+  }
+
+  function showSuccess(msg) {
+    const box = document.getElementById('success-box');
+    if (!box) return;
+    box.textContent = msg;
+    box.style.display = 'block';
+  }
+
+  function hideMessages() {
+    ['error-box', 'success-box'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // Allow submitting with Ctrl+Enter in the textarea
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.key === 'Enter') submitRoute();
+  });
+
+  // Allow loading maps with Enter in the secret field
+  document.getElementById('secret-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') loadMaps();
+  });
+</script>
+
+</body>
+</html>

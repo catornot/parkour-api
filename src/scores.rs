@@ -9,6 +9,16 @@ pub type ScoreEntries = HashMap<String, Vec<ScoreEntry>>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ScoreEntry {
+    pub uid: String,
+    pub name: String,
+    pub time: f64,
+    pub timestamp: i64,
+    // pub recording_ref: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ScoreRequest {
+    uid: String,
     name: String,
     time: f32,
 }
@@ -24,7 +34,29 @@ async fn get_list(route_id: String, store: Store) -> Result<impl Reply, Rejectio
         ));
     }
 
-    let scores = scores_read_lock.get(&route_id).unwrap();
+    let db = store.db.lock();
+    let mut stmt = db
+        .prepare(
+            "SELECT s.uid, u.name, s.time, s.timestamp \
+             FROM scores s JOIN users u ON s.uid = u.uid \
+             WHERE s.map_name = ?1 AND s.route_slug = ?2 \
+             ORDER BY s.time ASC",
+        )
+        .unwrap();
+
+    let entries: Vec<ScoreEntry> = stmt
+        .query_map([&map_name, &route_slug], |row| {
+            Ok(ScoreEntry {
+                uid: row.get(0)?,
+                name: row.get(1)?,
+                time: row.get(2)?,
+                timestamp: row.get(3)?,
+            })
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect();
+
     Ok(warp::reply::with_status(
         warp::reply::json(&scores),
         StatusCode::OK,
@@ -74,18 +106,16 @@ async fn create_score_entry(
         }
     }
 
-    // Create new entry
-    scores.push(ScoreEntry {
-        name: entry.name,
-        time: entry.time,
-    });
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
 
-    // Sort list by times
-    scores.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
-
-    // Restore list
-    let mut write_lock = store.scores_list.write();
-    write_lock.insert(route_id, scores.to_vec());
+    db.execute(
+        "INSERT OR REPLACE INTO scores (map_name, route_slug, uid, time, timestamp) VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![map_name, route_slug, body.uid, body.time, now],
+    )
+    .unwrap();
 
     Ok(warp::reply::with_status(
         warp::reply::json(&"Score created."),

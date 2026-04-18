@@ -54,9 +54,15 @@ POST /v1/maps
 GET /v1/maps/:map_name/routes
 ```
 
-Returns all routes registered on the map.
+Returns all routes registered on the map as an object keyed by route slug.
 
-**Response `200`**: array of route objects (same shape as the create body, see below)
+**Response `200`**
+```json
+{
+    "example-route": { "name": "Example Route", ... },
+    "another-route": { "name": "Another Route", ... }
+}
+```
 
 **Response `404`**: map not found
 
@@ -75,6 +81,7 @@ All coordinate arrays are `[x, y, z]` (floats). Angle arrays are `[pitch, yaw, r
 ```json
 {
     "name": "Example Route",
+    "default": false,
 
     "start_line": {
         "origin":     [x, y, z],
@@ -153,7 +160,7 @@ All coordinate arrays are `[x, y, z]` (floats). Angle arrays are `[pitch, yaw, r
 }
 ```
 
-`perks` and `entities` are optional; they default to `{}` and `[]` respectively.
+`perks` and `entities` are optional; they default to `{}` and `[]` respectively. `default` is optional and defaults to `false`; setting it to `true` marks this route as the default for the map (clears `default` on all other routes).
 
 Each entity in `entities` has the shape:
 ```json
@@ -178,6 +185,23 @@ Each entity in `entities` has the shape:
 
 ---
 
+### Edit route
+
+```
+PUT /v1/maps/:map_name/routes/:route_slug?reason=optional+reason
+```
+
+Replaces the route identified by `:route_slug` with the request body. The body shape is identical to the create body above. If `name` changes, a new slug is derived and returned. The optional `reason` query parameter is logged alongside the edit.
+
+**Responses**
+| Status | Meaning |
+|--------|---------|
+| `200`  | Route updated. Response body is the (possibly new) slug |
+| `208`  | The new route name conflicts with a different existing route on this map |
+| `404`  | Map or route not found |
+
+---
+
 ## Scores
 
 ### List scores for a route
@@ -191,10 +215,12 @@ Returns scores sorted by time ascending.
 **Response `200`**
 ```json
 [
-    { "uid": "abc123", "name": "PlayerOne", "time": 28.441 },
-    { "uid": "def456", "name": "PlayerTwo", "time": 31.002 }
+    { "uid": "abc123", "name": "PlayerOne", "time": 28.441, "timestamp": 1713312000 },
+    { "uid": "def456", "name": "PlayerTwo", "time": 31.002, "timestamp": 1713315600 }
 ]
 ```
+
+`timestamp` is a Unix epoch in seconds.
 
 **Response `404`**: map or route not found
 
@@ -235,3 +261,13 @@ GET /
 ```
 
 Web scoreboard showing all maps and routes. Not authentication-protected. Static assets are served from `/assets/`.
+
+---
+
+## Admin
+
+```
+GET /admin
+```
+
+Browser-based UI for creating and editing routes. Not authentication-protected (the page prompts for the API secret and sends it as the `authentication` header on each API call).
