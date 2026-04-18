@@ -38,7 +38,7 @@ pub fn init_db() -> Connection {
 
     // Migration for existing databases without the timestamp column
     let _ = conn.execute_batch(
-        "ALTER TABLE scores ADD COLUMN timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now'));",
+        "ALTER TABLE scores ADD COLUMN timestamp INTEGER NOT NULL DEFAULT 0;",
     );
 
     conn
