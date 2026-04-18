@@ -1,12 +1,12 @@
-use std::{sync::Arc, time::SystemTime, fs::File, io::Read};
+use std::{fs::File, io::Read, sync::Arc, time::SystemTime};
 
-use chrono::{NaiveDateTime, DateTime, Utc};
-use handlebars::{Handlebars, handlebars_helper};
-use serde::{Serialize, Deserialize};
+use chrono::{DateTime, NaiveDateTime, Utc};
+use handlebars::{handlebars_helper, Handlebars};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-use warp::{Filter, Reply, Rejection};
+use warp::{Filter, Rejection, Reply};
 
-use crate::{Store, event::Event, log, scores::ScoreEntry};
+use crate::{event::Event, log, scores::ScoreEntry, Store};
 
 const TEMPLATE_FILE: &str = "scoreboard/template.html";
 
@@ -20,18 +20,24 @@ struct RouteResult {
     id: String,
     name: String,
     map_name: String,
-    scores: Vec<ScoreEntry>
+    scores: Vec<ScoreEntry>,
 }
 
-
-fn render(hbs: Arc<Handlebars<'_>>, store: Store) -> impl warp::Reply
-{
+fn render(hbs: Arc<Handlebars<'_>>, store: Store) -> impl warp::Reply {
     // Find current event
-    let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     let events = store.clone().events_list.read().clone().into_iter();
-    let corresponding_events: Vec<Event> = events.filter(|e| now >= e.start.try_into().unwrap() && now <= e.end.try_into().unwrap()).collect();
+    let corresponding_events: Vec<Event> = events
+        .filter(|e| now >= e.start.try_into().unwrap() && now <= e.end.try_into().unwrap())
+        .collect();
     if corresponding_events.len() != 1 {
-        log::error(&format!("Expected one corresponding event, found {}.", corresponding_events.len()));
+        log::error(&format!(
+            "Expected one corresponding event, found {}.",
+            corresponding_events.len()
+        ));
         std::process::exit(42);
     }
 
@@ -52,19 +58,25 @@ fn render(hbs: Arc<Handlebars<'_>>, store: Store) -> impl warp::Reply
         let routes = store.clone().routes_list.read().clone();
         let map_id = map.id.unwrap();
         if !routes.contains_key(&map_id) {
-            log::warn(&format!("No route was found for map {}, skipping.", &map_id));
+            log::warn(&format!(
+                "No route was found for map {}, skipping.",
+                &map_id
+            ));
             continue;
         }
 
         let corresponding_routes = routes.get(&map_id).unwrap().clone();
-        let mut map_routes: Vec<RouteResult> = corresponding_routes.into_iter().map(|route| {
-            return RouteResult {
-                id: route.id.unwrap(),
-                name: route.name,
-                map_name: map.map_name.clone(),
-                scores: Vec::new()
-            }
-        }).collect();
+        let mut map_routes: Vec<RouteResult> = corresponding_routes
+            .into_iter()
+            .map(|route| {
+                return RouteResult {
+                    id: route.id.unwrap(),
+                    name: route.name,
+                    map_name: map.map_name.clone(),
+                    scores: Vec::new(),
+                };
+            })
+            .collect();
         results.append(&mut map_routes);
     }
 
@@ -73,7 +85,10 @@ fn render(hbs: Arc<Handlebars<'_>>, store: Store) -> impl warp::Reply
     for result in &mut results {
         let route_id = &result.id;
         if !scores.contains_key(route_id) {
-            log::warn(&format!("No scores were found for route {}, skipping.", &route_id));
+            log::warn(&format!(
+                "No scores were found for route {}, skipping.",
+                &route_id
+            ));
             continue;
         }
         result.scores = scores.get(route_id).unwrap().clone();
@@ -91,17 +106,19 @@ fn render(hbs: Arc<Handlebars<'_>>, store: Store) -> impl warp::Reply
     let render = hbs
         .render(template.name, &template.value)
         .unwrap_or_else(|err| err.to_string());
-    
+
     warp::reply::html(render)
 }
-
 
 pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     // Load HTML template
     let mut file = match File::open(TEMPLATE_FILE) {
         Ok(file) => file,
         Err(_) => {
-            log::info(&format!("\"{}\" template file was not found.", TEMPLATE_FILE));
+            log::info(&format!(
+                "\"{}\" template file was not found.",
+                TEMPLATE_FILE
+            ));
             std::process::exit(3);
         }
     };
@@ -109,15 +126,17 @@ pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = 
     match file.read_to_string(&mut data) {
         Ok(_) => (),
         Err(err) => {
-            log::error(&format!("Failed reading \"{}\" file [{}].", TEMPLATE_FILE, err));
+            log::error(&format!(
+                "Failed reading \"{}\" file [{}].",
+                TEMPLATE_FILE, err
+            ));
             std::process::exit(2);
         }
     };
 
     let mut hb = Handlebars::new();
     // register the template
-    hb.register_template_string("template.html", data)
-        .unwrap();
+    hb.register_template_string("template.html", data).unwrap();
 
     // Add a helper to have indexes starting from 1
     handlebars_helper!(score_index: |index: i64| index+1);
@@ -146,9 +165,7 @@ pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = 
     // Static route to serve CSS and JS assets
     let static_assets = warp::path("assets").and(warp::fs::dir("scoreboard/assets"));
 
-    let get_scoreboard_route = warp::get()
-        .and(warp::path::end())
-        .map(handlebars);
+    let get_scoreboard_route = warp::get().and(warp::path::end()).map(handlebars);
 
     static_assets.or(get_scoreboard_route)
 }
