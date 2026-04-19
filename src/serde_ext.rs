@@ -2,8 +2,8 @@ use core::fmt;
 use std::{marker::PhantomData, mem::MaybeUninit};
 
 use serde::{
-    de::{SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
+    de::{SeqAccess, Visitor},
 };
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy)]
@@ -27,6 +27,17 @@ impl From<[f64; 3]> for Vector3 {
 impl From<Vector3> for [f64; 3] {
     fn from(val: Vector3) -> Self {
         [val.x, val.y, val.z]
+    }
+}
+
+pub fn serialize_option_flat<S, T>(value: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: Serialize + Default,
+{
+    match value {
+        Some(obj) => obj.serialize(serializer),
+        None => T::default().serialize(serializer),
     }
 }
 

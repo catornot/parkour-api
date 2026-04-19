@@ -8,8 +8,7 @@ pub struct ScoreEntry {
     pub uid: String,
     pub name: String,
     pub time: f64,
-    pub timestamp: i64,
-    // pub recording_ref: String,
+    pub recording: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -17,6 +16,13 @@ struct ScoreRequest {
     uid: String,
     name: String,
     time: f64,
+    recording: String,
+}
+
+#[derive(Debug, Serialize)]
+struct GhostRecord {
+    name: String,
+    recording: String,
 }
 
 fn route_exists(store: &Store, map_name: &str, route_slug: &str) -> bool {
@@ -42,20 +48,21 @@ async fn get_list(
     let db = store.db.lock();
     let mut stmt = db
         .prepare(
-            "SELECT s.uid, u.name, s.time, s.timestamp \
-             FROM scores s JOIN users u ON s.uid = u.uid \
-             WHERE s.map_name = ?1 AND s.route_slug = ?2 \
-             ORDER BY s.time ASC",
+            "SELECT s.uid, u.name, s.time, s.timestamp, s.recording \
+                    FROM scores s \
+                    JOIN users u ON s.uid = u.uid \
+                    WHERE s.map_name = ?1 AND s.route_slug = ?2 \
+                    ORDER BY s.time ASC;",
         )
         .unwrap();
 
     let entries: Vec<ScoreEntry> = stmt
-        .query_map([&map_name, &route_slug], |row| {
+        .query_map([map_name, route_slug], |row| {
             Ok(ScoreEntry {
                 uid: row.get(0)?,
                 name: row.get(1)?,
                 time: row.get(2)?,
-                timestamp: row.get(3)?,
+                recording: "".to_string(),
             })
         })
         .unwrap()
@@ -115,8 +122,8 @@ async fn create_score(
         .as_secs() as i64;
 
     db.execute(
-        "INSERT OR REPLACE INTO scores (map_name, route_slug, uid, time, timestamp) VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![map_name, route_slug, body.uid, body.time, now],
+        "INSERT OR REPLACE INTO scores (map_name, route_slug, uid, time, timestamp, recording) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![map_name, route_slug, body.uid, body.time, now, body.recording],
     )
     .unwrap();
 
@@ -124,6 +131,82 @@ async fn create_score(
         warp::reply::json(&"Score created."),
         StatusCode::CREATED,
     ))
+}
+
+async fn get_recording(
+    map_name: String,
+    route_slug: String,
+    uid: String,
+    store: Store,
+) -> Result<impl Reply, Rejection> {
+    if !route_exists(&store, &map_name, &route_slug) {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&"Route not found."),
+            StatusCode::NOT_FOUND,
+        ));
+    }
+
+    let db = store.db.lock();
+
+    let ghost = db
+        .query_row(
+            r#"
+    SELECT u.name, s.recording
+    FROM scores s
+    JOIN users u ON u.uid = s.uid
+    WHERE s.map_name = ?1
+    AND s.route_slug = ?2
+    AND s.recording <> ''
+    AND s.time < (
+        SELECT time
+        FROM scores
+        WHERE map_name = ?1
+        AND route_slug = ?2
+        AND uid = ?3
+        LIMIT 1
+    )
+    ORDER BY s.time DESC
+    LIMIT 1;
+    "#,
+            rusqlite::params![map_name, route_slug, uid],
+            |row| {
+                Ok(GhostRecord {
+                    name: row.get(0)?,
+                    recording: row.get(1)?,
+                })
+            },
+        )
+        .ok()
+        .or_else(|| {
+            // try to get the lowest time (since maybe the player doesn't have a score on this route)
+            db.query_row(
+                r#"SELECT u.name, s.time, s.recording
+                        FROM scores s
+                        JOIN users u ON u.uid = s.uid
+                        ORDER BY s.time DESC
+                        LIMIT 1
+                    "#,
+                rusqlite::params![],
+                |row| {
+                    Ok(GhostRecord {
+                        name: row.get(0)?,
+                        recording: row.get(2)?,
+                    })
+                },
+            )
+            .ok()
+        });
+
+    match ghost {
+        Some(ghost) => Ok(warp::reply::with_status(
+            warp::reply::json(&ghost),
+            StatusCode::OK,
+        )),
+        None => Ok(warp::reply::with_status(
+            warp::reply::json(&"No recording found."),
+            StatusCode::NOT_FOUND,
+        )),
+    }
 }
 
 fn post_json() -> impl Filter<Extract = (ScoreRequest,), Error = Rejection> + Clone {
@@ -153,8 +236,20 @@ pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = 
         .and(warp::path("scores"))
         .and(warp::path::end())
         .and(post_json())
-        .and(store_filter)
+        .and(store_filter.clone())
         .and_then(create_score);
 
-    list.or(create)
+    let recording = warp::get()
+        .and(warp::path("v1"))
+        .and(warp::path("maps"))
+        .and(warp::path::param())
+        .and(warp::path("routes"))
+        .and(warp::path::param())
+        .and(warp::path("recording"))
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and(store_filter)
+        .and_then(get_recording);
+
+    list.or(create).or(recording)
 }

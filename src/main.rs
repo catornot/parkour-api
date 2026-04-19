@@ -5,7 +5,7 @@ mod route;
 mod scoreboard;
 mod scores;
 mod serde_ext;
-mod slug;
+pub mod slug;
 
 use map::Maps;
 use parking_lot::{Mutex, RwLock};

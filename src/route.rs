@@ -1,62 +1,37 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use warp::{Filter, Rejection, Reply, http::StatusCode};
 
-use crate::{
-    Store,
-    serde_ext::{
-        deserialize_arr_vector, deserialize_iter, deserialize_iter_arr, deserialize_vector,
-        serialize_iter, serialize_iter_arr, serialize_vector,
-    },
-    slug::slugify,
-};
-use serde::{Deserialize, Serialize};
+use crate::{Store, serde_ext::serialize_option_flat, slug::slugify};
 
 pub type MapRoutes = HashMap<String, Vec<MapRoute>>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Line {
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
-    angles: [f64; 3],
+    angles: [i64; 3],
     dimensions: [i64; 2],
-    #[serde(serialize_with = "serialize_iter")]
-    #[serde(deserialize_with = "deserialize_arr_vector")]
     trigger: [[f64; 3]; 2],
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
 struct RouteName {
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
-    angles: [f64; 3],
+    angles: [i64; 3],
     dimensions: [i64; 2],
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct LeaderboardSource {
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
-    angles: [f64; 3],
+    angles: [i64; 3],
     dimensions: [i64; 2],
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Leaderboard {
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
-    angles: [f64; 3],
+    angles: [i64; 3],
     dimensions: [i64; 2],
     source: LeaderboardSource,
 }
@@ -69,29 +44,19 @@ struct Leaderboards {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct StartPosition {
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
-    angles: [f64; 3],
+    angles: [i64; 3],
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct EndPosition {
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Robot {
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     origin: [f64; 3],
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
-    angles: [f64; 3],
+    angles: [i64; 3],
     talkable_radius: i64,
     animation: String,
 }
@@ -104,11 +69,7 @@ struct StartIndicator {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct MapObject {
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     coordinates: [f64; 3],
-    #[serde(serialize_with = "serialize_vector")]
-    #[serde(deserialize_with = "deserialize_vector")]
     angles: [f64; 3],
     scale: f64,
     model_name: String,
@@ -123,18 +84,17 @@ pub struct MapRoute {
     start_line: Line,
     finish_line: Line,
     leaderboards: Leaderboards,
-    #[serde(serialize_with = "serialize_iter")]
-    #[serde(deserialize_with = "deserialize_iter")]
     checkpoints: Vec<[f64; 3]>,
     start: StartPosition,
     end: EndPosition,
-    #[serde(serialize_with = "serialize_iter_arr")]
-    #[serde(deserialize_with = "deserialize_iter_arr")]
     ziplines: Vec<[[f64; 3]; 2]>,
+    #[serde(serialize_with = "serialize_option_flat")]
     perks: Option<HashMap<String, String>>,
     robot: Robot,
     indicator: StartIndicator,
-    route_name: RouteName,
+    #[serde(serialize_with = "serialize_option_flat")]
+    route_name: Option<RouteName>, // not sure why this is needed
+    #[serde(serialize_with = "serialize_option_flat")]
     entities: Option<Vec<MapObject>>,
 }
 
@@ -284,8 +244,9 @@ async fn get_map_routes(map_name: String, store: Store) -> Result<impl Reply, Re
         Some(routes) => {
             let map: HashMap<String, serde_json::Value> = routes
                 .iter()
-                .map(|r| (slugify(&r.name), serde_json::to_value(r).unwrap()))
+                .map(|route| (slugify(&route.name), serde_json::to_value(route).unwrap()))
                 .collect();
+
             Ok(warp::reply::with_status(
                 warp::reply::json(&map),
                 StatusCode::OK,

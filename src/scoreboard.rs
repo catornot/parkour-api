@@ -35,7 +35,7 @@ fn render(hbs: Arc<Handlebars<'_>>, store: Store) -> impl warp::Reply {
 
             let mut stmt = db
                 .prepare(
-                    "SELECT s.uid, u.name, s.time, s.timestamp \
+                    "SELECT s.uid, u.name, s.time, s.timestamp, s.recording \
                      FROM scores s JOIN users u ON s.uid = u.uid \
                      WHERE s.map_name = ?1 AND s.route_slug = ?2 \
                      ORDER BY s.time ASC",
@@ -48,7 +48,7 @@ fn render(hbs: Arc<Handlebars<'_>>, store: Store) -> impl warp::Reply {
                         uid: row.get(0)?,
                         name: row.get(1)?,
                         time: row.get(2)?,
-                        timestamp: row.get(3)?,
+                        recording: "".to_string(),
                     })
                 })
                 .unwrap()
