@@ -26,7 +26,7 @@ struct GhostRecord {
 }
 
 fn route_exists(store: &Store, map_name: &str, route_slug: &str) -> bool {
-    let routes = store.routes_list.blocking_read();
+    let routes = store.routes_list.read();
     match routes.get(map_name) {
         None => false,
         Some(map_routes) => map_routes.iter().any(|r| slugify(&r.name) == route_slug),
@@ -45,7 +45,7 @@ async fn get_list(
         ));
     }
 
-    let db = store.db.blocking_lock();
+    let db = store.db.lock();
     let mut stmt = db
         .prepare(
             "SELECT s.uid, u.name, s.time, s.timestamp, s.recording \
@@ -88,7 +88,7 @@ async fn create_score(
         ));
     }
 
-    let db = store.db.blocking_lock();
+    let db = store.db.lock();
 
     // Upsert user (update name if it changed)
     db.execute(
@@ -146,7 +146,7 @@ async fn get_recording(
         ));
     }
 
-    let db = store.db.blocking_lock();
+    let db = store.db.lock();
 
     let ghost = db
         .query_row(

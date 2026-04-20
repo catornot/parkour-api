@@ -18,13 +18,13 @@ struct RouteResult {
 }
 
 fn render(hbs: Arc<Handlebars<'_>>, store: Store) -> impl warp::Reply {
-    let routes_snapshot = store.routes_list.blocking_read().clone();
-    let db = store.db.blocking_lock();
+    let routes_snapshot = store.routes_list.read().clone();
+    let db = store.db.lock();
 
     let mut results: Vec<RouteResult> = Vec::new();
 
     // Iterate maps in insertion order (maps_list preserves it)
-    for map_name in store.maps_list.blocking_read().iter() {
+    for map_name in store.maps_list.read().iter() {
         let map_routes = match routes_snapshot.get(map_name) {
             Some(r) => r,
             None => continue,

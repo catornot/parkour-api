@@ -13,14 +13,14 @@ struct CreateMapRequest {
 }
 
 async fn get_list(store: Store) -> Result<impl Reply, Rejection> {
-    let r = store.maps_list.read().await;
+    let r = store.maps_list.read();
     Ok(warp::reply::json(&*r))
 }
 
 async fn create_map(body: CreateMapRequest, store: Store) -> Result<impl Reply, Rejection> {
     let map_name = body.map_name.trim().to_string();
 
-    if store.routes_list.read().await.contains_key(&map_name) {
+    if store.routes_list.read().contains_key(&map_name) {
         return Ok(warp::reply::with_status(
             warp::reply::json(&"Map already exists."),
             StatusCode::ALREADY_REPORTED,
@@ -30,9 +30,8 @@ async fn create_map(body: CreateMapRequest, store: Store) -> Result<impl Reply, 
     store
         .routes_list
         .write()
-        .await
         .insert(map_name.clone(), Vec::new());
-    store.maps_list.write().await.push(map_name);
+    store.maps_list.write().push(map_name);
 
     Ok(warp::reply::with_status(
         warp::reply::json(&"Map created."),
