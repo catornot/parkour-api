@@ -72,6 +72,13 @@
             };
 
             config = lib.mkIf cfg.enable {
+              users.users.parkour-api = {
+                isSystemUser = true;
+                group = "parkour-api";
+              };
+
+              users.groups.parkour-api = { };
+
               systemd.services.parkour-api = {
                 description = "Parkour API server";
                 wantedBy = [ "multi-user.target" ];
@@ -79,51 +86,39 @@
                   "network.target"
                 ];
 
+                preStart = ''
+                  export PATH=${lib.makeBinPath [ pkgs.coreutils ]}
+                  install -d -m 0750 /var/lib/parkour-api/scoreboard
+                  cp -f ${./scoreboard/template.html} /var/lib/parkour-api/scoreboard/template.html
+                '';
+
                 serviceConfig = {
                   Restart = "always";
                   KillSignal = "SIGINT";
-                  DynamicUser = true;
+                  User = "parkour-api";
+                  Group = "parkour-api";
                   WorkingDirectory = "/var/lib/parkour-api";
                   StateDirectory = "parkour-api";
-                  UMask = "0007";
-                  Environment = [
-                    "TEMPLATE_FILE=${./scoreboard/template.html}"
-                  ];
-                  EnvironmentFile = [
-                    (
-                      if cfg.apiKeyFile == null then
-                        pkgs.writeText "apikey" ''
-                          PARKOUR_API_SECRET=${cfg.apiKey}
-                        ''
-                      else
-                        cfg.apiKeyFile
-                    )
+                  UMask = "0022";
+                  EnvironmentFile =
+                    if cfg.apiKeyFile == null then
+                      pkgs.writeText "apikey" ''
+                        PARKOUR_API_SECRET=${cfg.apiKey}
+                      ''
+                    else
+                      cfg.apiKeyFile;
 
-                  ];
-                  preStart = ''
-                    export PATH=${lib.makeBinPath [ pkgs.coreutils ]}
-                    echo "test2"
-                    install -d -m 0750 /var/lib/parkour-api/scoreboard
-                    cp -f ${./scoreboard/template.html} /var/lib/parkour-api/scoreboard/template.html
-                  '';
                   ExecStart = "${cfg.package}/bin/parkour-api";
 
                   # Sandboxing
                   NoNewPrivileges = true;
-                  PrivateTmp = true;
                   PrivateDevices = true;
-                  ProtectSystem = "strict";
+                  ProtectSystem = "full";
                   ReadWritePaths = [ "/var/lib/parkour-api" ];
                   ProtectHome = true;
                   ProtectControlGroups = true;
                   ProtectKernelModules = true;
                   ProtectKernelTunables = true;
-                  RestrictAddressFamilies = [
-                    "AF_UNIX"
-                    "AF_INET"
-                    "AF_INET6"
-                    "AF_NETLINK"
-                  ];
                   RestrictRealtime = true;
                   RestrictNamespaces = true;
                   MemoryDenyWriteExecute = true;
