@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read, sync::Arc};
+use std::{env, fs::File, io::Read, sync::Arc};
 
 use handlebars::{Handlebars, handlebars_helper};
 use serde::{Deserialize, Serialize};
@@ -73,12 +73,15 @@ fn render(hbs: Arc<Handlebars<'_>>, store: Store) -> impl warp::Reply {
 }
 
 pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-    let mut file = match File::open(TEMPLATE_FILE) {
+    let template_file = env::var("TEMPLATE_FILE")
+        .ok()
+        .unwrap_or_else(|| TEMPLATE_FILE.to_string());
+    let mut file = match File::open(&template_file) {
         Ok(file) => file,
         Err(_) => {
             log::info(&format!(
                 "\"{}\" template file was not found.",
-                TEMPLATE_FILE
+                template_file
             ));
             std::process::exit(3);
         }
@@ -89,7 +92,7 @@ pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = 
         Err(err) => {
             log::error(&format!(
                 "Failed reading \"{}\" file [{}].",
-                TEMPLATE_FILE, err
+                template_file, err
             ));
             std::process::exit(2);
         }
