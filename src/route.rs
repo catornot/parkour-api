@@ -107,7 +107,7 @@ async fn create_map_route(
     mut entry: MapRoute,
     store: Store,
 ) -> Result<impl Reply, Rejection> {
-    let routes_list = store.routes_list.read();
+    let routes_list = store.routes_list.read().await;
     let map_routes = match routes_list.get(&map_name) {
         Some(r) => r,
         None => {
@@ -134,8 +134,8 @@ async fn create_map_route(
         entry.entities = Some(Vec::new());
     }
 
-    drop(routes_list);
-    let mut routes_write = store.routes_list.write();
+    drop(routes_list); // do another await due to the drop also swaps write to read access
+    let mut routes_write = store.routes_list.write().await;
     let map_routes = routes_write.get_mut(&map_name).unwrap();
 
     if entry.default {
@@ -166,7 +166,7 @@ async fn edit_map_route(
     mut entry: MapRoute,
     store: Store,
 ) -> Result<impl Reply, Rejection> {
-    let mut routes_list = store.routes_list.write();
+    let mut routes_list = store.routes_list.write().await;
     let map_routes = match routes_list.get_mut(&map_name) {
         Some(r) => r,
         None => {
@@ -235,7 +235,7 @@ async fn edit_map_route(
 }
 
 async fn get_map_routes(map_name: String, store: Store) -> Result<impl Reply, Rejection> {
-    let routes_read_lock = store.routes_list.read();
+    let routes_read_lock = store.routes_list.read().await;
     match routes_read_lock.get(&map_name) {
         None => Ok(warp::reply::with_status(
             warp::reply::json(&"Map not found."),

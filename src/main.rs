@@ -8,11 +8,11 @@ mod serde_ext;
 pub mod slug;
 
 use map::Maps;
-use parking_lot::{Mutex, RwLock};
 use persistence::{init_db, load_state, start_save_cron};
 use route::MapRoutes;
 use rusqlite::Connection;
 use std::{env, sync::Arc};
+use tokio::sync::{Mutex, RwLock};
 use warp::Filter;
 
 #[derive(Clone)]
@@ -47,11 +47,11 @@ async fn main() {
     let header_value = Box::leak(secret.into_boxed_str());
     let accept_requests = warp::header::exact("authentication", header_value);
 
-    let db = init_db();
+    let db = init_db().await;
     let store = Store::new(db);
 
-    load_state(store.clone());
-    start_save_cron(store.clone());
+    load_state(store.clone()).await;
+    start_save_cron(store.clone()).await;
 
     // Routes
     let map_routes = map::get_routes(store.clone());

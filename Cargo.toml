@@ -8,10 +8,9 @@ edition = "2024"
 [dependencies]
 chrono = "0.4.26"
 warp = { version = "0.4.2", features = ["server"] }
-parking_lot = "0.12.1"
 serde = { version = "1.0.164", features = ["derive"] }
 serde_json = { version = "1.0.99" }
-tokio = { version = "1.29.1", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1.29.1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "fs"] }
 handlebars = "4.3.7"
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 

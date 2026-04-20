@@ -1,9 +1,9 @@
-use std::env;
-use std::fs::create_dir_all;
-use std::io::prelude::*;
-use std::{fs::File, thread, time::Duration};
-
 use rusqlite::Connection;
+use std::{env, time::Duration};
+use tokio::{
+    fs,
+    io::{AsyncReadExt, AsyncWriteExt},
+};
 
 use crate::route::MapRoutes;
 use crate::{Store, log};
@@ -12,8 +12,10 @@ const ROUTES_FILE: &str = "data/routes.json";
 const DB_FILE: &str = "data/scores.db";
 
 /// Opens (or creates) the SQLite database and runs schema migrations.
-pub fn init_db() -> Connection {
-    create_dir_all("data").expect("Failed to create data directory");
+pub async fn init_db() -> Connection {
+    fs::create_dir_all("data")
+        .await
+        .expect("Failed to create data directory");
     let conn = Connection::open(DB_FILE).expect("Failed to open SQLite database");
 
     conn.execute_batch(
@@ -46,7 +48,7 @@ pub fn init_db() -> Connection {
 /// customized with the `PARKOUR_API_SAVE_TIMER` environment variable.
 ///
 /// Saves routes to JSON on a background thread at a configurable interval.
-pub fn start_save_cron(store: Store) {
+pub async fn start_save_cron(store: Store) {
     let cron_interval_minutes: u64 = match env::var("PARKOUR_API_SAVE_TIMER") {
         Ok(s) => {
             log::info(&format!("Timer argument found ({} minutes).", s));
@@ -58,11 +60,11 @@ pub fn start_save_cron(store: Store) {
         }
     };
 
-    thread::spawn(move || {
+    tokio::task::spawn(async move {
         loop {
-            thread::sleep(Duration::from_secs(cron_interval_minutes * 60));
+            tokio::time::sleep(Duration::from_secs(cron_interval_minutes * 60)).await;
 
-            match create_dir_all("data") {
+            match fs::create_dir_all("data").await {
                 Ok(_) => (),
                 Err(err) => {
                     log::error(&format!("Failed creating data directory [{}].", err));
@@ -70,8 +72,8 @@ pub fn start_save_cron(store: Store) {
                 }
             };
 
-            let routes = store.routes_list.read().clone();
-            let mut buffer = match File::create(ROUTES_FILE) {
+            let routes = store.routes_list.read().await.clone();
+            let mut buffer = match fs::File::create(ROUTES_FILE).await {
                 Ok(file) => file,
                 Err(err) => {
                     log::error(&format!(
@@ -88,7 +90,7 @@ pub fn start_save_cron(store: Store) {
                     std::process::exit(3);
                 }
             };
-            match buffer.write_all(str.as_bytes()) {
+            match buffer.write_all(str.as_bytes()).await {
                 Ok(_) => (),
                 Err(err) => {
                     log::error(&format!("Failed writing routes list to file [{}].", err));
@@ -101,8 +103,8 @@ pub fn start_save_cron(store: Store) {
 }
 
 /// Loads routes from JSON file into store on startup.
-pub fn load_state(store: Store) {
-    let mut file = match File::open(ROUTES_FILE) {
+pub async fn load_state(store: Store) {
+    let mut file = match fs::File::open(ROUTES_FILE).await {
         Ok(file) => file,
         Err(_) => {
             log::info(&format!(
@@ -114,7 +116,7 @@ pub fn load_state(store: Store) {
     };
 
     let mut data = String::new();
-    match file.read_to_string(&mut data) {
+    match file.read_to_string(&mut data).await {
         Ok(_) => (),
         Err(err) => {
             log::error(&format!(
@@ -133,8 +135,8 @@ pub fn load_state(store: Store) {
         }
     };
 
-    let mut routes_lock = store.routes_list.write();
-    let mut maps_lock = store.maps_list.write();
+    let mut routes_lock = store.routes_list.write().await;
+    let mut maps_lock = store.maps_list.write().await;
     for (map_name, routes) in serialized {
         maps_lock.push(map_name.clone());
         routes_lock.insert(map_name, routes);
