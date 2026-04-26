@@ -84,12 +84,16 @@
                 wantedBy = [ "multi-user.target" ];
                 after = [
                   "network.target"
+                  "systemd-tmpfiles-setup.service"
                 ];
+                requires = [ "systemd-tmpfiles-setup.service" ];
 
                 preStart = ''
                   export PATH=${lib.makeBinPath [ pkgs.coreutils ]}
-                  install -d -m 0750 /var/lib/parkour-api/scoreboard
-                  cp -f ${./scoreboard/template.html} /var/lib/parkour-api/scoreboard/template.html
+                  rm -rf /var/lib/parkour-api/scoreboard
+                  rm -rf /var/lib/parkour-api/admin
+                  ln -s ${./scoreboard} /var/lib/parkour-api/scoreboard
+                  ln -s ${./admin} /var/lib/parkour-api/admin
                 '';
 
                 serviceConfig = {
@@ -100,14 +104,7 @@
                   WorkingDirectory = "/var/lib/parkour-api";
                   StateDirectory = "parkour-api";
                   UMask = "0022";
-                  EnvironmentFile =
-                    if cfg.apiKeyFile == null then
-                      pkgs.writeText "apikey" ''
-                        PARKOUR_API_SECRET=${cfg.apiKey}
-                      ''
-                    else
-                      cfg.apiKeyFile;
-
+                  EnvironmentFile = "/var/lib/parkour-api/env";
                   ExecStart = "${cfg.package}/bin/parkour-api";
 
                   # Sandboxing
@@ -125,9 +122,16 @@
                 };
               };
 
-              systemd.tmpfiles.rules = lib.optional (
+              systemd.tmpfiles.rules = [
+                "d /var/lib/parkour-api 0640 parkour parkour -"
+                "d /var/lib/parkour-api/data 0640 parkour parkour -"
+              ]
+              ++ lib.optional (
                 cfg.apiKeyFile == null
-              ) "f /var/lib/parkour-api/env 0640 - - - PARKOUR_API_SECRET=${cfg.apiKey}";
+              ) "f /var/lib/parkour-api/env 0640 parkour parkour - PARKOUR_API_SECRET=${cfg.apiKey}"
+              ++ lib.optional (
+                cfg.apiKeyFile != null
+              ) "c /var/lib/parkour-api/env 0640 parkour parkour - ${cfg.apiKeyFile}";
 
               networking.firewall.allowedTCPPorts = lib.optional cfg.openFirewall 3031;
             };

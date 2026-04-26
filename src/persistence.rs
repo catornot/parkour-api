@@ -26,8 +26,8 @@ pub fn init_db() -> Connection {
             route_slug TEXT NOT NULL,
             uid        TEXT NOT NULL,
             time       REAL NOT NULL,
-            recording TEXT NOT NULL,
-            PRIMARY KEY (map_name, route_slug, uid, recording),
+            recording BLOB NOT NULL,
+            PRIMARY KEY (map_name, route_slug, uid),
             FOREIGN KEY (uid) REFERENCES users(uid)
         );",
     )

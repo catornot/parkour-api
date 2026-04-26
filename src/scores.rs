@@ -210,7 +210,7 @@ async fn get_recording(
 }
 
 fn post_json() -> impl Filter<Extract = (ScoreRequest,), Error = Rejection> + Clone {
-    warp::body::content_length_limit(1024 * 16).and(warp::body::json())
+    warp::body::content_length_limit(1028 * 16 * 1028).and(warp::body::json())
 }
 
 pub fn get_routes(store: Store) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
